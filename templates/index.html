@@ -115,22 +115,41 @@
             <!-- Desktop QR Bridge View -->
             <div id="desktopBridgeView" class="hidden">
                 <p class="text-gray-400 mb-4 text-sm">Since you are on a computer, please scan this QR code with your phone to use your live camera and GPS coordinates.</p>
-                <div id="qrcode" class="flex justify-center mb-6 bg-white p-4 rounded-lg w-fit mx-auto"></div>
-                <div class="flex items-center justify-center gap-2 text-sm text-purple-400">
-                    <div class="animate-ping w-2 h-2 rounded-full bg-purple-500"></div>
+                <div id="qrcode" class="flex justify-center mb-6 bg-white p-4 rounded-lg w-fit mx-auto animate-fade-in"></div>
+                <div class="flex items-center justify-center gap-2 text-sm text-[#00FFC2] mb-6">
+                    <div class="animate-ping w-2 h-2 rounded-full bg-[#00FFC2]"></div>
                     <span>Waiting for mobile snapshot...</span>
                 </div>
+                <div class="border-t border-gray-800 pt-4">
+                    <p class="text-gray-500 text-xs mb-2">— OR —</p>
+                    <button onclick="showDirectUpload()" class="bg-gray-850 hover:bg-gray-800 text-white font-semibold text-xs py-2 px-4 rounded w-full border border-gray-700/50 transition-all shadow-md">Upload Image from this Device</button>
+                </div>
+            </div>
+
+            <!-- Desktop Direct Upload View -->
+            <div id="directUploadView" class="hidden text-left space-y-4">
+                <p class="text-gray-400 text-xs">Upload an image file directly. We will geo-tag the report using your browser's location (or the map's current center if unavailable).</p>
+                <div>
+                    <label class="block text-2xs font-semibold text-gray-500 mb-1">Select Image:</label>
+                    <input type="file" id="directFile" accept="image/*" class="w-full text-xs text-gray-400 bg-gray-900 border border-gray-800 rounded p-2 focus:outline-none focus:border-[#00FFC2] file:mr-4 file:py-1 file:px-2 file:rounded file:border-0 file:text-2xs file:font-semibold file:bg-gray-800 file:text-white hover:file:bg-gray-700 cursor-pointer" />
+                </div>
+                <div>
+                    <label class="block text-2xs font-semibold text-gray-500 mb-1">Citizen Username:</label>
+                    <input type="text" id="directUsername" value="Citizen Hero" class="w-full text-xs text-white bg-gray-900 border border-gray-800 rounded p-2 focus:outline-none focus:border-[#00FFC2]" />
+                </div>
+                <button onclick="submitDirectReport()" class="w-full bg-[#00FFC2] hover:bg-[#00e0a8] text-black font-semibold text-xs py-2 rounded transition-all shadow-lg hover:shadow-[#00FFC2]/20">Submit Report</button>
+                <button onclick="backToQR()" class="w-full text-center text-2xs text-gray-500 hover:text-white mt-1 transition-all">Back to QR Code</button>
             </div>
 
             <!-- Mobile Viewport view (Direct camera stream) -->
             <div id="mobileCaptureView" class="hidden flex flex-col items-center">
                 <video id="videoView" autoplay playsinline class="w-full max-h-64 object-cover rounded mb-4 bg-black"></video>
                 <canvas id="photoCanvas" class="hidden"></canvas>
-                <button onclick="capturePhoto()" class="w-16 h-16 rounded-full bg-red-600 border-4 border-white mb-4 hover:scale-105 transition-all"></button>
+                <button onclick="capturePhoto()" class="w-16 h-16 rounded-full bg-red-600 border-4 border-white mb-4 hover:scale-105 transition-all shadow-lg"></button>
                 <p class="text-xs text-gray-400">Rear camera and GPS will be captured</p>
             </div>
             
-            <button onclick="closeModal()" class="mt-6 text-sm text-gray-500 hover:text-white">Cancel</button>
+            <button onclick="closeModal()" class="mt-6 text-sm text-gray-500 hover:text-white transition-all">Cancel</button>
         </div>
     </div>
 
@@ -430,8 +449,79 @@
 
         function closeModal() {
             document.getElementById("modalOverlay").classList.add("hidden");
+            document.getElementById("directUploadView").classList.add("hidden");
+            document.getElementById("desktopBridgeView").classList.add("hidden");
+            document.getElementById("mobileCaptureView").classList.add("hidden");
+            document.getElementById("directFile").value = "";
             stopCamera();
             if (pollingInterval) clearInterval(pollingInterval);
+        }
+
+        function showDirectUpload() {
+            document.getElementById("desktopBridgeView").classList.add("hidden");
+            document.getElementById("directUploadView").classList.remove("hidden");
+        }
+
+        function backToQR() {
+            document.getElementById("directUploadView").classList.add("hidden");
+            document.getElementById("desktopBridgeView").classList.remove("hidden");
+        }
+
+        async function submitDirectReport() {
+            const fileInput = document.getElementById("directFile");
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert("Please select an image first.");
+                return;
+            }
+            const file = fileInput.files[0];
+            const username = document.getElementById("directUsername").value.trim() || "Hero";
+
+            // Get location (default to map center if browser geo fails)
+            const mapCenter = map.getCenter();
+            const defaultLat = mapCenter.lat;
+            const defaultLng = mapCenter.lng;
+
+            const submitWithCoords = async (latitude, longitude) => {
+                const formData = new FormData();
+                formData.append("image", file);
+                formData.append("latitude", latitude);
+                formData.append("longitude", longitude);
+                formData.append("username", username);
+
+                try {
+                    const resp = await fetch("/api/reports/submit", {
+                        method: "POST",
+                        body: formData
+                    });
+
+                    if (resp.ok) {
+                        alert("Report successfully logged from this device!");
+                        closeModal();
+                        loadReports();
+                        loadLeaderboard();
+                    } else {
+                        const errData = await resp.json();
+                        alert("Error: " + (errData.detail || "Failed to submit report"));
+                    }
+                } catch (e) {
+                    console.error("Submission failed", e);
+                    alert("Network error: Failed to connect to server.");
+                }
+            };
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        submitWithCoords(pos.coords.latitude, pos.coords.longitude);
+                    },
+                    (err) => {
+                        console.log("Browser location failed or denied. Defaulting to current map center view.");
+                        submitWithCoords(defaultLat, defaultLng);
+                    }
+                );
+            } else {
+                submitWithCoords(defaultLat, defaultLng);
+            }
         }
 
         function toggleRole() {
