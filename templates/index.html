@@ -378,7 +378,7 @@
                 // Generate QR pointing to mobile upload page
                 const qrUrl = window.location.origin + "?session=" + activeSessionToken;
                 document.getElementById("qrcode").innerHTML = "";
-                const typeNumber = 4;
+                const typeNumber = 0;
                 const errorCorrectionLevel = 'L';
                 const qr = qrcode(typeNumber, errorCorrectionLevel);
                 qr.addData(qrUrl);
