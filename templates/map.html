@@ -213,7 +213,7 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">Original Hazard Image</span>
-                        <img id="modalBeforeImage" class="w-full h-48 object-cover rounded-2xl border border-white/10 bg-slate-900" src="" alt="Before">
+                        <div id="beforeCarouselContainer"></div>
                     </div>
                     <div id="modalAfterContainer" class="hidden">
                         <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block mb-2 text-[#00E5B0]">AI Verified Resolution</span>
@@ -268,6 +268,86 @@
         let markerGroup;
         let allReports = [];
         let searchTimeout = null;
+
+        function getFirstImagePath(pathString) {
+            if (!pathString) return "";
+            try {
+                const paths = JSON.parse(pathString);
+                return Array.isArray(paths) ? (paths[0] || "") : pathString;
+            } catch(e) {
+                return pathString;
+            }
+        }
+
+        function renderImageCarousel(elementId, pathString, fallbackAlt) {
+            const container = document.getElementById(elementId);
+            let paths = [];
+            try {
+                paths = JSON.parse(pathString);
+                if (!Array.isArray(paths)) {
+                    paths = [pathString];
+                }
+            } catch(e) {
+                paths = [pathString];
+            }
+            
+            container.innerHTML = "";
+            if (paths.length === 0) {
+                container.innerHTML = `<div class="w-full h-48 bg-slate-900 flex items-center justify-center text-slate-500 rounded-2xl border border-white/10">No Image</div>`;
+                return;
+            }
+            
+            const wrapper = document.createElement("div");
+            wrapper.className = "relative w-full h-48 rounded-2xl overflow-hidden border border-white/10 bg-slate-950 flex items-center justify-center";
+            
+            const imgEl = document.createElement("img");
+            imgEl.className = "w-full h-full object-cover transition-opacity duration-300";
+            imgEl.src = paths[0];
+            imgEl.alt = fallbackAlt;
+            wrapper.appendChild(imgEl);
+            
+            if (paths.length > 1) {
+                let activeIdx = 0;
+                
+                const prevBtn = document.createElement("button");
+                prevBtn.className = "absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950/70 border border-white/10 flex items-center justify-center text-white hover:bg-slate-950 font-bold z-10 text-xs transition-colors";
+                prevBtn.innerHTML = "❮";
+                prevBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    activeIdx = (activeIdx - 1 + paths.length) % paths.length;
+                    imgEl.style.opacity = 0;
+                    setTimeout(() => {
+                        imgEl.src = paths[activeIdx];
+                        imgEl.style.opacity = 1;
+                        indicator.textContent = `${activeIdx + 1}/${paths.length}`;
+                    }, 150);
+                };
+                
+                const nextBtn = document.createElement("button");
+                nextBtn.className = "absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950/70 border border-white/10 flex items-center justify-center text-white hover:bg-slate-950 font-bold z-10 text-xs transition-colors";
+                nextBtn.innerHTML = "❯";
+                nextBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    activeIdx = (activeIdx + 1) % paths.length;
+                    imgEl.style.opacity = 0;
+                    setTimeout(() => {
+                        imgEl.src = paths[activeIdx];
+                        imgEl.style.opacity = 1;
+                        indicator.textContent = `${activeIdx + 1}/${paths.length}`;
+                    }, 150);
+                };
+                
+                const indicator = document.createElement("span");
+                indicator.className = "absolute bottom-2 right-2 px-2 py-0.5 rounded-lg bg-slate-950/80 text-[10px] text-slate-300 font-mono border border-white/5";
+                indicator.textContent = `1/${paths.length}`;
+                
+                wrapper.appendChild(prevBtn);
+                wrapper.appendChild(nextBtn);
+                wrapper.appendChild(indicator);
+            }
+            
+            container.appendChild(wrapper);
+        }
 
         const statusColors = {
             'Pending': '#f59e0b',
@@ -397,7 +477,7 @@
                 // Custom tooltip on hover with preview image and details
                 marker.bindTooltip(`
                     <div class="flex flex-col gap-1.5 w-44 text-slate-200 pointer-events-none">
-                        <img src="${r.image_path}" class="w-full h-20 object-cover rounded-lg border border-white/10 bg-slate-950">
+                        <img src="${getFirstImagePath(r.image_path)}" class="w-full h-20 object-cover rounded-lg border border-white/10 bg-slate-950">
                         <div class="flex justify-between items-center text-[9px] font-bold">
                             <span class="font-mono text-slate-300">${r.id}</span>
                             <span class="px-1 py-0.5 rounded text-[8px]" style="background-color: ${color}20; color: ${color}">${r.status}</span>
@@ -419,7 +499,7 @@
                             <span class="font-mono font-bold text-slate-300 text-xs">${r.id}</span>
                             <span class="text-3xs font-extrabold uppercase px-1.5 py-0.5 rounded" style="background-color: ${color}20; color: ${color}">${r.status}</span>
                         </div>
-                        <img src="${r.image_path}" class="w-full h-24 object-cover rounded-lg border border-white/10 shadow-md">
+                        <img src="${getFirstImagePath(r.image_path)}" class="w-full h-24 object-cover rounded-lg border border-white/10 shadow-md">
                         <p class="text-2xs text-slate-300 line-clamp-2">${r.description || 'No description'}</p>
                         <button onclick="window.openDetailModal('${r.id}')" class="w-full text-center bg-accent hover:bg-[#00c294] text-slate-950 font-bold py-1.5 rounded-lg text-2xs transition-all shadow">Inspect Hazard</button>
                     </div>
@@ -486,7 +566,7 @@
             if (!r) return;
 
             document.getElementById("modalTitle").textContent = `Report Details - ${r.id}`;
-            document.getElementById("modalBeforeImage").src = r.image_path;
+            renderImageCarousel("beforeCarouselContainer", r.image_path, "Before");
             
             if (r.status === 'Resolved' && r.resolved_image_path) {
                 document.getElementById("modalAfterContainer").classList.remove("hidden");

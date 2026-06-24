@@ -234,10 +234,14 @@
 
             <!-- Direct file upload form -->
             <div id="directUploadView" class="hidden text-left space-y-3.5">
-                <p class="text-slate-400 text-2xs">Upload an image file directly. We will geo-tag it using your location.</p>
+                <p class="text-slate-400 text-2xs">Upload image files directly. We will geo-tag them using your location.</p>
                 <div>
-                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Select Image File</label>
-                    <input type="file" id="directFile" accept="image/*" class="w-full text-xs text-slate-400 bg-slate-950 border border-white/10 rounded-xl p-2.5 focus:outline-none file:mr-3 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-3xs file:font-bold file:bg-[#00FFC2] file:text-black hover:file:opacity-90 cursor-pointer" />
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Select Image File(s)</label>
+                    <input type="file" id="directFile" accept="image/*" multiple class="w-full text-xs text-slate-400 bg-slate-950 border border-white/10 rounded-xl p-2.5 focus:outline-none file:mr-3 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-3xs file:font-bold file:bg-[#00FFC2] file:text-black hover:file:opacity-90 cursor-pointer" />
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">User Notes (Optional)</label>
+                    <textarea id="directUserNote" placeholder="Add extra context (e.g. pothole depth, blocking lane, safety hazard...)" class="w-full text-xs text-slate-300 bg-slate-950 border border-white/10 rounded-xl p-2.5 h-16 resize-none focus:outline-none focus:border-[#00FFC2]/50"></textarea>
                 </div>
                 <button onclick="submitDirectReportImage()" class="w-full bg-[#00FFC2] hover:bg-[#00e5b0] text-black font-bold text-xs py-3 rounded-xl transition-all shadow-md shadow-emerald-500/10">
                     Analyze with AI
@@ -279,7 +283,7 @@
             
             <!-- Preview image -->
             <div class="mb-4 relative rounded-xl overflow-hidden bg-slate-900 border border-white/5 aspect-video">
-                <img id="wizardPreviewImage" class="w-full h-full object-cover" src="" />
+                <div id="wizardPreviewContainer" class="w-full h-full"></div>
                 <div id="wizardCoordsIndicator" class="absolute bottom-2 left-2 bg-black/60 backdrop-blur px-2.5 py-1 rounded-lg text-3xs text-[#00FFC2] border border-white/5">
                     Lat: --, Lng: --
                 </div>
@@ -352,11 +356,101 @@
         let pollingInterval = null;
         let currentUser = null;
 
+        function getFirstImagePath(pathString) {
+            if (!pathString) return "";
+            try {
+                const paths = JSON.parse(pathString);
+                return Array.isArray(paths) ? (paths[0] || "") : pathString;
+            } catch(e) {
+                return pathString;
+            }
+        }
+
         // Wizard temporary states
-        let wizardFile = null;          // Direct file object if local
+        let wizardFiles = [];           // Array of File objects if local
         let wizardImagePath = null;     // Server path if bridge upload
         let wizardLat = null;
         let wizardLng = null;
+
+        function renderWizardCarousel(elementId, pathsInput, fallbackAlt) {
+            const container = document.getElementById(elementId);
+            let paths = [];
+            if (Array.isArray(pathsInput)) {
+                paths = pathsInput;
+            } else if (typeof pathsInput === "string") {
+                try {
+                    paths = JSON.parse(pathsInput);
+                    if (!Array.isArray(paths)) {
+                        paths = [pathsInput];
+                    }
+                } catch(e) {
+                    paths = [pathsInput];
+                }
+            } else {
+                paths = [pathsInput];
+            }
+            
+            container.innerHTML = "";
+            if (paths.length === 0) {
+                container.innerHTML = `<div class="w-full h-full bg-slate-900 flex items-center justify-center text-slate-500 rounded-xl border border-white/10">No Image</div>`;
+                return;
+            }
+            
+            const wrapper = document.createElement("div");
+            wrapper.className = "relative w-full h-full bg-slate-950 flex items-center justify-center";
+            
+            const imgEl = document.createElement("img");
+            imgEl.className = "w-full h-full object-cover transition-opacity duration-300";
+            imgEl.src = paths[0];
+            imgEl.alt = fallbackAlt || "Preview";
+            wrapper.appendChild(imgEl);
+            
+            if (paths.length > 1) {
+                let activeIdx = 0;
+                
+                const prevBtn = document.createElement("button");
+                prevBtn.type = "button";
+                prevBtn.className = "absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950/70 border border-white/10 flex items-center justify-center text-white hover:bg-slate-950 font-bold z-10 text-xs transition-colors";
+                prevBtn.innerHTML = "❮";
+                prevBtn.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    activeIdx = (activeIdx - 1 + paths.length) % paths.length;
+                    imgEl.style.opacity = 0;
+                    setTimeout(() => {
+                        imgEl.src = paths[activeIdx];
+                        imgEl.style.opacity = 1;
+                        indicator.textContent = `${activeIdx + 1}/${paths.length}`;
+                    }, 150);
+                };
+                
+                const nextBtn = document.createElement("button");
+                nextBtn.type = "button";
+                nextBtn.className = "absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950/70 border border-white/10 flex items-center justify-center text-white hover:bg-slate-950 font-bold z-10 text-xs transition-colors";
+                nextBtn.innerHTML = "❯";
+                nextBtn.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    activeIdx = (activeIdx + 1) % paths.length;
+                    imgEl.style.opacity = 0;
+                    setTimeout(() => {
+                        imgEl.src = paths[activeIdx];
+                        imgEl.style.opacity = 1;
+                        indicator.textContent = `${activeIdx + 1}/${paths.length}`;
+                    }, 150);
+                };
+                
+                const indicator = document.createElement("span");
+                indicator.className = "absolute bottom-2 right-2 px-2 py-0.5 rounded-lg bg-slate-950/80 text-[10px] text-slate-300 font-mono border border-white/5";
+                indicator.textContent = `1/${paths.length}`;
+                
+                wrapper.appendChild(prevBtn);
+                wrapper.appendChild(nextBtn);
+                wrapper.appendChild(indicator);
+            }
+            
+            container.appendChild(wrapper);
+        }
 
         // Initialize Web GIS
         window.onload = function () {
@@ -596,7 +690,7 @@
                         </div>
                         <p class="text-slate-400 text-[11px]"><b>Dept:</b> ${r.department} | <b>Priority:</b> Lvl ${r.priority}</p>
                         <div class="flex gap-2 items-center">
-                            <img src="${r.image_path}" class="w-12 h-12 object-cover rounded border border-white/10" />
+                            <img src="${getFirstImagePath(r.image_path)}" class="w-12 h-12 object-cover rounded border border-white/10" />
                             <span class="text-slate-500 text-[10px]">${new Date(r.created_at).toLocaleString()}</span>
                         </div>
                     `;
@@ -632,7 +726,7 @@
                 // Beautiful hover tooltip cards displaying the image thumbnail
                 const tooltipContent = `
                     <div class="glass-panel p-2.5 rounded-xl border border-white/10 shadow-2xl flex flex-col items-center text-center text-xs" style="min-width: 140px;">
-                        <img src="${r.image_path}" class="w-24 h-24 object-cover rounded-lg border border-white/10 mb-2" />
+                        <img src="${getFirstImagePath(r.image_path)}" class="w-24 h-24 object-cover rounded-lg border border-white/10 mb-2" />
                         <span class="font-mono font-bold text-white block mb-0.5">${r.id}</span>
                         <span class="text-[10px] text-slate-400 block">${r.department}</span>
                         <span class="inline-block mt-1.5 px-2 py-0.5 rounded text-[8px] font-extrabold uppercase" style="background-color: ${color}; color: #030305;">
@@ -732,7 +826,7 @@
                     wizardImagePath = draft.image_path;
                     wizardLat = draft.latitude;
                     wizardLng = draft.longitude;
-                    wizardFile = null; // Stored on server already
+                    wizardFiles = []; // Stored on server already
 
                     openWizard(draft.image_path, draft.latitude, draft.longitude, draft.tags, draft.department, draft.priority, draft.analysis);
                 } else if (data.status === 'uploaded') {
@@ -779,10 +873,10 @@
         async function submitDirectReportImage() {
             const fileInput = document.getElementById("directFile");
             if (!fileInput.files || fileInput.files.length === 0) {
-                alert("Please select a photo to analyze.");
+                alert("Please select at least one photo to analyze.");
                 return;
             }
-            const file = fileInput.files[0];
+            const files = Array.from(fileInput.files);
             
             // Get coordinates
             const center = map.getCenter();
@@ -791,7 +885,13 @@
                 showLoader(true);
                 
                 const formData = new FormData();
-                formData.append("image", file);
+                files.forEach(f => {
+                    formData.append("images", f);
+                });
+                const userNote = document.getElementById("directUserNote") ? document.getElementById("directUserNote").value : "";
+                if (userNote) {
+                    formData.append("user_note", userNote);
+                }
                 
                 fetch("/api/reports/analyze", {
                     method: "POST",
@@ -801,15 +901,15 @@
                 .then(aiData => {
                     showLoader(false);
                     
-                    // Cache direct file & position context
-                    wizardFile = file;
+                    // Cache direct files & position context
+                    wizardFiles = files;
                     wizardImagePath = null;
                     wizardLat = latitude;
                     wizardLng = longitude;
                     
-                    // Create temporary preview URL for display
-                    const previewUrl = URL.createObjectURL(file);
-                    openWizard(previewUrl, latitude, longitude, aiData.tags, aiData.department, aiData.priority, aiData.analysis);
+                    // Create temporary preview URLs for display
+                    const previewUrls = files.map(f => URL.createObjectURL(f));
+                    openWizard(previewUrls, latitude, longitude, aiData.tags, aiData.department, aiData.priority, aiData.analysis);
                 })
                 .catch(err => {
                     showLoader(false);
@@ -912,7 +1012,7 @@
 
         // Open AI diagnostic edit wizard
         function openWizard(imgSrc, lat, lng, tags, dept, priority, analysis) {
-            document.getElementById("wizardPreviewImage").src = imgSrc;
+            renderWizardCarousel("wizardPreviewContainer", imgSrc, "Preview");
             document.getElementById("wizardCoordsIndicator").textContent = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
             
             document.getElementById("wizardTags").value = Array.isArray(tags) ? tags.join(", ") : tags;
@@ -925,7 +1025,7 @@
 
         function closeWizard() {
             document.getElementById("aiWizardModal").classList.add("hidden");
-            wizardFile = null;
+            wizardFiles = [];
             wizardImagePath = null;
         }
 
@@ -940,8 +1040,10 @@
             const formData = new FormData();
             
             // Image source
-            if (wizardFile) {
-                formData.append("image", wizardFile);
+            if (wizardFiles && wizardFiles.length > 0) {
+                wizardFiles.forEach(f => {
+                    formData.append("images", f);
+                });
             } else if (wizardImagePath) {
                 formData.append("image_path", wizardImagePath);
             } else {

@@ -71,16 +71,22 @@
         <!-- A. MOBILE CAMERA MODE (Active only when session parameter exists) -->
         <section id="mobileCameraView" class="hidden glass-panel rounded-3xl border border-white/10 p-6 space-y-6 text-center">
             <h2 class="text-xl font-bold">Mobile Capture Portal</h2>
-            <p class="text-slate-400 text-xs">Snap a photo of the public hazard to send to your desktop screen draft instantly.</p>
+            <p class="text-slate-400 text-xs">Snap one or more photos of the public hazard to send to your desktop screen draft instantly.</p>
             
             <div class="relative w-full max-w-md mx-auto aspect-[4/3] rounded-2xl overflow-hidden border border-white/10 bg-slate-950">
                 <video id="videoView" autoplay playsinline class="w-full h-full object-cover"></video>
                 <canvas id="photoCanvas" class="hidden"></canvas>
             </div>
 
+            <!-- Horizontal list of captured image thumbnails -->
+            <div id="capturedThumbnailsContainer" class="flex gap-2 justify-center overflow-x-auto py-2 empty:hidden"></div>
+
             <div class="flex flex-col gap-3 max-w-sm mx-auto">
-                <button onclick="capturePhoto()" class="w-full py-4 bg-[#00E5B0] text-slate-950 font-extrabold rounded-2xl shadow-lg active:scale-[0.98]">
-                    📸 Capture & Send Photo
+                <button onclick="capturePhoto()" class="w-full py-3.5 bg-slate-900 border border-white/10 text-white font-extrabold rounded-2xl shadow-lg active:scale-[0.98]">
+                    📸 Capture Photo
+                </button>
+                <button id="mobileSendBtn" onclick="submitMobilePhotos()" class="w-full py-4 bg-[#00E5B0] text-slate-950 font-extrabold rounded-2xl shadow-lg active:scale-[0.98] hidden">
+                    🚀 Send Photos to Desktop
                 </button>
                 <div class="relative flex py-1 items-center">
                     <div class="flex-grow border-t border-white/5"></div>
@@ -88,8 +94,8 @@
                     <div class="flex-grow border-t border-white/5"></div>
                 </div>
                 <label class="w-full py-3 border border-white/20 text-slate-200 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer block">
-                    📁 Choose Existing File
-                    <input type="file" id="mobileFileInput" accept="image/*" class="hidden" onchange="submitMobileFile(this)">
+                    📁 Choose Existing File(s)
+                    <input type="file" id="mobileFileInput" accept="image/*" multiple class="hidden" onchange="submitMobileFile(this)">
                 </label>
             </div>
         </section>
@@ -119,7 +125,7 @@
             <div id="panelStep1" class="glass-panel rounded-3xl border border-white/10 p-6 space-y-6">
                 <div class="text-center space-y-2">
                     <h2 class="text-xl font-bold">Choose Image Source</h2>
-                    <p class="text-slate-400 text-xs max-w-sm mx-auto">Select a local image from your PC or snap a direct picture with your phone's camera.</p>
+                    <p class="text-slate-400 text-xs max-w-sm mx-auto">Select local images from your PC or snap a direct picture with your phone's camera.</p>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -128,8 +134,8 @@
                         <span class="text-3xl">💻</span>
                         <h3 class="font-bold text-sm">Select Image from PC</h3>
                         <label class="bg-accent hover:bg-[#00c294] text-slate-950 font-bold px-4 py-2 rounded-xl text-xs cursor-pointer block transition-all">
-                            📁 Browse File
-                            <input type="file" id="directFileInput" accept="image/*" class="hidden" onchange="handleDirectUpload(this)">
+                            📁 Browse File(s)
+                            <input type="file" id="directFileInput" accept="image/*" multiple class="hidden" onchange="handleDirectUpload(this)">
                         </label>
                     </div>
 
@@ -142,6 +148,12 @@
                         </div>
                         <span class="text-[10px] text-slate-500 uppercase tracking-wider">Awaiting phone sync...</span>
                     </div>
+                </div>
+
+                <!-- Optional User Notes text area -->
+                <div class="space-y-2 text-left">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">User Notes (Optional)</label>
+                    <textarea id="directUserNote" placeholder="Add extra context (e.g. pothole depth, blocking lane, safety hazard...)" class="w-full text-xs text-slate-300 bg-slate-950 border border-white/10 rounded-xl p-2.5 h-16 resize-none focus:outline-none focus:border-[#00E5B0]/50"></textarea>
                 </div>
             </div>
 
@@ -161,7 +173,7 @@
                         <!-- Left image and dynamic GPS location -->
                         <div class="space-y-4">
                             <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">Image Preview</span>
-                            <img id="wizardImage" class="w-full aspect-[4/3] object-cover rounded-2xl border border-white/10 bg-slate-900 shadow-lg" src="" alt="Hazard Image">
+                            <div id="wizardPreviewContainer" class="w-full aspect-[4/3] rounded-2xl border border-white/10 bg-slate-900 shadow-lg overflow-hidden"></div>
                             <div class="glass-card p-3 rounded-xl flex items-center justify-between text-2xs">
                                 <span class="text-slate-400">Captured Coordinates:</span>
                                 <span class="font-mono text-accent font-bold" id="wizardCoords">Lat: --, Lng: --</span>
@@ -259,10 +271,90 @@
         let pollingInterval = null;
 
         // Diagnostic context cache
-        let wizardFile = null;
+        let wizardFiles = [];
         let wizardImagePath = null;
         let wizardLat = null;
         let wizardLng = null;
+
+        function renderWizardCarousel(elementId, pathsInput, fallbackAlt) {
+            const container = document.getElementById(elementId);
+            let paths = [];
+            if (Array.isArray(pathsInput)) {
+                paths = pathsInput;
+            } else if (typeof pathsInput === "string") {
+                try {
+                    paths = JSON.parse(pathsInput);
+                    if (!Array.isArray(paths)) {
+                        paths = [pathsInput];
+                    }
+                } catch(e) {
+                    paths = [pathsInput];
+                }
+            } else {
+                paths = [pathsInput];
+            }
+            
+            container.innerHTML = "";
+            if (paths.length === 0) {
+                container.innerHTML = `<div class="w-full h-full bg-slate-900 flex items-center justify-center text-slate-500 rounded-xl border border-white/10">No Image</div>`;
+                return;
+            }
+            
+            const wrapper = document.createElement("div");
+            wrapper.className = "relative w-full h-full bg-slate-950 flex items-center justify-center";
+            
+            const imgEl = document.createElement("img");
+            imgEl.className = "w-full h-full object-cover transition-opacity duration-300";
+            imgEl.src = paths[0];
+            imgEl.alt = fallbackAlt || "Preview";
+            wrapper.appendChild(imgEl);
+            
+            if (paths.length > 1) {
+                let activeIdx = 0;
+                
+                const prevBtn = document.createElement("button");
+                prevBtn.type = "button";
+                prevBtn.className = "absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950/70 border border-white/10 flex items-center justify-center text-white hover:bg-slate-950 font-bold z-10 text-xs transition-colors";
+                prevBtn.innerHTML = "❮";
+                prevBtn.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    activeIdx = (activeIdx - 1 + paths.length) % paths.length;
+                    imgEl.style.opacity = 0;
+                    setTimeout(() => {
+                        imgEl.src = paths[activeIdx];
+                        imgEl.style.opacity = 1;
+                        indicator.textContent = `${activeIdx + 1}/${paths.length}`;
+                    }, 150);
+                };
+                
+                const nextBtn = document.createElement("button");
+                nextBtn.type = "button";
+                nextBtn.className = "absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950/70 border border-white/10 flex items-center justify-center text-white hover:bg-slate-950 font-bold z-10 text-xs transition-colors";
+                nextBtn.innerHTML = "❯";
+                nextBtn.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    activeIdx = (activeIdx + 1) % paths.length;
+                    imgEl.style.opacity = 0;
+                    setTimeout(() => {
+                        imgEl.src = paths[activeIdx];
+                        imgEl.style.opacity = 1;
+                        indicator.textContent = `${activeIdx + 1}/${paths.length}`;
+                    }, 150);
+                };
+                
+                const indicator = document.createElement("span");
+                indicator.className = "absolute bottom-2 right-2 px-2 py-0.5 rounded-lg bg-slate-950/80 text-[10px] text-slate-300 font-mono border border-white/5";
+                indicator.textContent = `1/${paths.length}`;
+                
+                wrapper.appendChild(prevBtn);
+                wrapper.appendChild(nextBtn);
+                wrapper.appendChild(indicator);
+            }
+            
+            container.appendChild(wrapper);
+        }
 
         window.onload = function() {
             renderHeaderAuth();
@@ -322,34 +414,95 @@
             }
         }
 
-        function capturePhoto() {
-            navigator.geolocation.getCurrentPosition((pos) => {
-                const video = document.getElementById("videoView");
-                const canvas = document.getElementById("photoCanvas");
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                canvas.getContext('2d').drawImage(video, 0, 0);
+        let mobileCapturedBlobs = [];
+
+        function renderMobileThumbnails() {
+            const container = document.getElementById("capturedThumbnailsContainer");
+            if (!container) return;
+            container.innerHTML = "";
+            
+            mobileCapturedBlobs.forEach((blob, idx) => {
+                const url = URL.createObjectURL(blob);
+                const thumb = document.createElement("div");
+                thumb.className = "relative w-16 h-16 rounded-lg overflow-hidden border border-white/20 flex-shrink-0 bg-slate-900";
                 
-                canvas.toBlob(async (blob) => {
-                    const formData = new FormData();
-                    formData.append("image", blob, "camera.jpg");
-                    formData.append("latitude", pos.coords.latitude);
-                    formData.append("longitude", pos.coords.longitude);
-                    
-                    let url = "/api/reports/submit";
-                    const params = new URLSearchParams(window.location.search);
-                    const sessionToken = params.get("session");
-                    if (sessionToken) {
-                        url = `/api/sessions/upload/${sessionToken}`;
-                    }
-                    
+                const img = document.createElement("img");
+                img.className = "w-full h-full object-cover";
+                img.src = url;
+                
+                const delBtn = document.createElement("button");
+                delBtn.className = "absolute top-0 right-0 w-5 h-5 bg-red-600/80 text-white rounded-bl flex items-center justify-center font-bold text-xs";
+                delBtn.textContent = "✕";
+                delBtn.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    mobileCapturedBlobs.splice(idx, 1);
+                    renderMobileThumbnails();
+                };
+                
+                thumb.appendChild(img);
+                thumb.appendChild(delBtn);
+                container.appendChild(thumb);
+            });
+            
+            const sendBtn = document.getElementById("mobileSendBtn");
+            if (mobileCapturedBlobs.length > 0) {
+                sendBtn.classList.remove("hidden");
+                sendBtn.textContent = `🚀 Send ${mobileCapturedBlobs.length} Photo(s) to Desktop`;
+            } else {
+                sendBtn.classList.add("hidden");
+            }
+        }
+
+        function capturePhoto() {
+            const video = document.getElementById("videoView");
+            const canvas = document.getElementById("photoCanvas");
+            if (!video || !canvas) return;
+            
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    mobileCapturedBlobs.push(blob);
+                    renderMobileThumbnails();
+                    showToast("📸 Photo captured locally!", "success");
+                }
+            }, "image/jpeg");
+        }
+
+        async function submitMobilePhotos() {
+            if (mobileCapturedBlobs.length === 0) return;
+            
+            showToast("📍 Verifying GPS location...", "info");
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const formData = new FormData();
+                mobileCapturedBlobs.forEach((blob, idx) => {
+                    formData.append("images", blob, `camera_${idx}.jpg`);
+                });
+                formData.append("latitude", pos.coords.latitude);
+                formData.append("longitude", pos.coords.longitude);
+                
+                let url = "/api/reports/submit";
+                const params = new URLSearchParams(window.location.search);
+                const sessionToken = params.get("session");
+                if (sessionToken) {
+                    url = `/api/sessions/upload/${sessionToken}`;
+                }
+                
+                showToast("⚙️ Uploading draft report...", "info");
+                try {
                     const resp = await fetch(url, {
                         method: "POST",
                         body: formData
                     });
                     
                     if (resp.ok) {
-                        showToast("✅ Photo successfully uploaded to draft!", "success");
+                        showToast("✅ Photos successfully uploaded to draft!", "success");
+                        mobileCapturedBlobs = [];
+                        renderMobileThumbnails();
                         if (sessionToken) {
                             setTimeout(() => {
                                 window.location.href = window.location.origin;
@@ -358,7 +511,9 @@
                     } else {
                         showToast("❌ Image upload failed.", "error");
                     }
-                }, "image/jpeg");
+                } catch(e) {
+                    showToast("❌ Network error.", "error");
+                }
             }, (err) => {
                 showToast("📍 Please enable GPS coordinates on your phone.", "error");
             });
@@ -366,11 +521,14 @@
 
         async function submitMobileFile(input) {
             if (!input.files || input.files.length === 0) return;
-            const file = input.files[0];
+            const files = Array.from(input.files);
             
+            showToast("📍 Verifying GPS location...", "info");
             navigator.geolocation.getCurrentPosition(async (pos) => {
                 const formData = new FormData();
-                formData.append("image", file);
+                files.forEach(f => {
+                    formData.append("images", f);
+                });
                 formData.append("latitude", pos.coords.latitude);
                 formData.append("longitude", pos.coords.longitude);
 
@@ -382,9 +540,10 @@
                 }
 
                 try {
+                    showToast("⚙️ Uploading draft report...", "info");
                     const resp = await fetch(url, { method: "POST", body: formData });
                     if (resp.ok) {
-                        showToast("✅ File successfully uploaded!", "success");
+                        showToast("✅ File(s) successfully uploaded!", "success");
                         if (sessionToken) {
                             setTimeout(() => {
                                 window.location.href = window.location.origin;
@@ -439,7 +598,7 @@
                     wizardImagePath = draft.image_path;
                     wizardLat = draft.latitude;
                     wizardLng = draft.longitude;
-                    wizardFile = null;
+                    wizardFiles = [];
 
                     openWizard(draft.image_path, draft.latitude, draft.longitude, draft.tags, draft.department, draft.priority, draft.analysis);
                 } else if (data.status === 'uploaded') {
@@ -455,7 +614,7 @@
 
         function handleDirectUpload(input) {
             if (!input.files || input.files.length === 0) return;
-            const file = input.files[0];
+            const files = Array.from(input.files);
             
             // Switch to Step 2
             document.getElementById("panelStep1").classList.add("hidden");
@@ -465,18 +624,24 @@
 
             // Geolocation and submit to analyze
             navigator.geolocation.getCurrentPosition(
-                (pos) => runAIAnalysis(file, pos.coords.latitude, pos.coords.longitude),
+                (pos) => runAIAnalysis(files, pos.coords.latitude, pos.coords.longitude),
                 () => {
                     // Fallback to Bengaluru default coords
                     showToast("ℹ️ GPS unavailable, using default city center.", "info");
-                    runAIAnalysis(file, 12.9716, 77.5946);
+                    runAIAnalysis(files, 12.9716, 77.5946);
                 }
             );
         }
 
-        async function runAIAnalysis(file, lat, lng) {
+        async function runAIAnalysis(files, lat, lng) {
             const formData = new FormData();
-            formData.append("image", file);
+            files.forEach(f => {
+                formData.append("images", f);
+            });
+            const userNote = document.getElementById("directUserNote") ? document.getElementById("directUserNote").value : "";
+            if (userNote) {
+                formData.append("user_note", userNote);
+            }
 
             try {
                 const resp = await fetch("/api/reports/analyze", {
@@ -488,13 +653,13 @@
                 }
                 const data = await resp.json();
                 
-                wizardFile = file;
+                wizardFiles = files;
                 wizardImagePath = null;
                 wizardLat = lat;
                 wizardLng = lng;
 
-                const previewUrl = URL.createObjectURL(file);
-                openWizard(previewUrl, lat, lng, data.tags, data.department, data.priority, data.analysis);
+                const previewUrls = files.map(f => URL.createObjectURL(f));
+                openWizard(previewUrls, lat, lng, data.tags, data.department, data.priority, data.analysis);
             } catch(err) {
                 showToast("❌ Vision AI analysis failed. Please try again.", "error");
                 backToStep1();
@@ -505,7 +670,7 @@
             document.getElementById("aiLoader").classList.add("hidden");
             document.getElementById("diagnosticWizard").classList.remove("hidden");
 
-            document.getElementById("wizardImage").src = imgSrc;
+            renderWizardCarousel("wizardPreviewContainer", imgSrc, "Preview");
             document.getElementById("wizardCoords").textContent = `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`;
             
             document.getElementById("wizardTags").value = Array.isArray(tags) ? tags.join(", ") : tags;
@@ -526,14 +691,18 @@
             document.getElementById("diagnosticWizard").classList.add("hidden");
 
             document.getElementById("directFileInput").value = "";
+            const directNote = document.getElementById("directUserNote");
+            if (directNote) directNote.value = "";
             initializeDesktopStep1();
         }
 
         async function submitWizardReport() {
             const formData = new FormData();
             
-            if (wizardFile) {
-                formData.append("image", wizardFile);
+            if (wizardFiles && wizardFiles.length > 0) {
+                wizardFiles.forEach(f => {
+                    formData.append("images", f);
+                });
             } else if (wizardImagePath) {
                 formData.append("image_path", wizardImagePath);
             } else {

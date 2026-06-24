@@ -9,6 +9,7 @@ import math
 import os
 from datetime import datetime
 import json
+from typing import List
 
 app = FastAPI(title="CivicFix Core")
 
@@ -35,15 +36,33 @@ def get_distance(lat1, lon1, lat2, lon2):
     return R * c
 
 @app.post("/api/reports/analyze")
-async def analyze_photo(image: UploadFile = File(...)):
-    contents = await image.read()
-    ai_data = gemini_service.analyze_report_image(contents)
+async def analyze_photo(
+    images: List[UploadFile] = File(None),
+    image: UploadFile = File(None), # Single image fallback
+    user_note: str = Form(None)
+):
+    uploaded_files = []
+    if images:
+        uploaded_files = images
+    elif image:
+        uploaded_files = [image]
+        
+    if not uploaded_files:
+        raise HTTPException(status_code=400, detail="No images uploaded")
+        
+    images_bytes = []
+    for file in uploaded_files:
+        contents = await file.read()
+        images_bytes.append(contents)
+        
+    ai_data = gemini_service.analyze_report_images(images_bytes, user_note)
     return ai_data
 
 @app.post("/api/reports/submit")
 async def submit_report(
-    image: UploadFile = File(None),
-    image_path: str = Form(None),
+    images: List[UploadFile] = File(None),
+    image: UploadFile = File(None), # Single image fallback
+    image_path: str = Form(None), # JSON list of paths or single path string
     latitude: float = Form(...),
     longitude: float = Form(...),
     tags: str = Form(...), # JSON serialized tags list
@@ -56,28 +75,49 @@ async def submit_report(
     token: str = Form(None) # Optional QR session token to link
 ):
     report_id = f"CF-{uuid.uuid4().hex[:6].upper()}"
-    filename = f"{report_id}_before.jpg"
-    filepath = os.path.join("/tmp/uploads", filename)
+    final_db_paths = []
     
-    if image:
-        contents = await image.read()
-        with open(filepath, "wb") as f:
-            f.write(contents)
+    # Gather uploaded files
+    uploaded_files = []
+    if images:
+        uploaded_files = images
+    elif image:
+        uploaded_files = [image]
+        
+    if uploaded_files:
+        for idx, img_file in enumerate(uploaded_files):
+            filename = f"{report_id}_before_{idx}.jpg"
+            filepath = os.path.join("/tmp/uploads", filename)
+            contents = await img_file.read()
+            with open(filepath, "wb") as f:
+                f.write(contents)
+            final_db_paths.append(f"/uploads/{filename}")
+            
     elif image_path:
-        # Map public URL path to local folder
-        local_path = image_path
-        if image_path.startswith("/uploads/"):
-            local_path = image_path.replace("/uploads/", "/tmp/uploads/", 1)
-        # Secure path checking
-        if not os.path.abspath(local_path).startswith("/tmp/uploads/"):
-            raise HTTPException(status_code=400, detail="Invalid image path")
-        if not os.path.exists(local_path):
-            raise HTTPException(status_code=404, detail="Draft image not found")
-        # Copy the temporary draft image to the final location
-        with open(local_path, "rb") as src, open(filepath, "wb") as dst:
-            dst.write(src.read())
+        # Check if it is a JSON list of paths
+        try:
+            paths = json.loads(image_path)
+            if not isinstance(paths, list):
+                paths = [image_path]
+        except Exception:
+            paths = [image_path]
+            
+        for idx, path in enumerate(paths):
+            local_path = path
+            if path.startswith("/uploads/"):
+                local_path = path.replace("/uploads/", "/tmp/uploads/", 1)
+            if not os.path.abspath(local_path).startswith("/tmp/uploads/"):
+                raise HTTPException(status_code=400, detail="Invalid image path")
+            if not os.path.exists(local_path):
+                raise HTTPException(status_code=404, detail=f"Draft image not found: {path}")
+                
+            filename = f"{report_id}_before_{idx}.jpg"
+            filepath = os.path.join("/tmp/uploads", filename)
+            with open(local_path, "rb") as src, open(filepath, "wb") as dst:
+                dst.write(src.read())
+            final_db_paths.append(f"/uploads/{filename}")
     else:
-        raise HTTPException(status_code=400, detail="No image provided")
+        raise HTTPException(status_code=400, detail="No images provided")
         
     try:
         tags_list = json.loads(tags)
@@ -102,15 +142,17 @@ async def submit_report(
     final_priority = min(5, priority + priority_bonus)
     now_str = datetime.utcnow().isoformat()
     
+    # Store list of paths as JSON serialized string
+    db_image_path_str = json.dumps(final_db_paths)
+    
     # Insert report with reporter context
-    db_image_path = f"/uploads/{filename}"
     cursor.execute("""
     INSERT INTO reports (
         id, latitude, longitude, image_path, tags, department, priority, 
         votes, status, created_at, updated_at, reporter_email, reporter_name
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        report_id, latitude, longitude, db_image_path, json.dumps(tags_list), 
+        report_id, latitude, longitude, db_image_path_str, json.dumps(tags_list), 
         department, final_priority, 1, "Reported", now_str, now_str, 
         reporter_email, reporter_name
     ))
@@ -231,9 +273,11 @@ async def get_session_status(token: str):
 @app.post("/api/sessions/upload/{token}")
 async def upload_session_photo(
     token: str,
-    image: UploadFile = File(...),
+    images: List[UploadFile] = File(None),
+    image: UploadFile = File(None), # Single image fallback
     latitude: float = Form(...),
-    longitude: float = Form(...)
+    longitude: float = Form(...),
+    user_note: str = Form(None)
 ):
     conn = database.get_db()
     cursor = conn.cursor()
@@ -242,25 +286,44 @@ async def upload_session_photo(
     if not row:
         conn.close()
         raise HTTPException(status_code=404, detail="Session not found")
-    
-    contents = await image.read()
-    filename = f"draft_{token}.jpg"
-    filepath = os.path.join("/tmp/uploads", filename)
-    with open(filepath, "wb") as f:
-        f.write(contents)
         
-    # Analyze the photo via Gemini
-    ai_data = gemini_service.analyze_report_image(contents)
+    # Gather uploaded files
+    uploaded_files = []
+    if images:
+        uploaded_files = images
+    elif image:
+        uploaded_files = [image]
+        
+    if not uploaded_files:
+        conn.close()
+        raise HTTPException(status_code=400, detail="No images uploaded")
+        
+    saved_paths = []
+    images_bytes = []
     
-    # Store draft details
+    # Save each file and collect bytes
+    for idx, file in enumerate(uploaded_files):
+        contents = await file.read()
+        images_bytes.append(contents)
+        
+        filename = f"draft_{token}_{idx}.jpg"
+        filepath = os.path.join("/tmp/uploads", filename)
+        with open(filepath, "wb") as f:
+            f.write(contents)
+        saved_paths.append(f"/uploads/{filename}")
+        
+    # Run multi-image decoupled analysis
+    ai_data = gemini_service.analyze_report_images(images_bytes, user_note)
+    
     draft_data = {
-        "image_path": f"/uploads/{filename}",
+        "image_path": json.dumps(saved_paths), # Serialized list of paths
         "latitude": latitude,
         "longitude": longitude,
         "tags": ai_data["tags"],
         "department": ai_data["department"],
         "priority": ai_data["priority"],
-        "analysis": ai_data["analysis"]
+        "analysis": ai_data["analysis"],
+        "user_note": user_note
     }
     
     cursor.execute(

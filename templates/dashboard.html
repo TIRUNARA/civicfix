@@ -207,7 +207,7 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">Original Hazard Image</span>
-                        <img id="modalBeforeImage" class="w-full h-48 object-cover rounded-2xl border border-white/10 bg-slate-900" src="" alt="Before">
+                        <div id="beforeCarouselContainer"></div>
                     </div>
                     <div id="modalAfterContainer" class="hidden">
                         <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block mb-2 text-[#00E5B0]">AI Verified Resolution</span>
@@ -260,6 +260,86 @@
     <script>
         let currentUser = JSON.parse(localStorage.getItem("user") || "null");
         let activeReports = [];
+
+        function getFirstImagePath(pathString) {
+            if (!pathString) return "";
+            try {
+                const paths = JSON.parse(pathString);
+                return Array.isArray(paths) ? (paths[0] || "") : pathString;
+            } catch(e) {
+                return pathString;
+            }
+        }
+
+        function renderImageCarousel(elementId, pathString, fallbackAlt) {
+            const container = document.getElementById(elementId);
+            let paths = [];
+            try {
+                paths = JSON.parse(pathString);
+                if (!Array.isArray(paths)) {
+                    paths = [pathString];
+                }
+            } catch(e) {
+                paths = [pathString];
+            }
+            
+            container.innerHTML = "";
+            if (paths.length === 0) {
+                container.innerHTML = `<div class="w-full h-48 bg-slate-900 flex items-center justify-center text-slate-500 rounded-2xl border border-white/10">No Image</div>`;
+                return;
+            }
+            
+            const wrapper = document.createElement("div");
+            wrapper.className = "relative w-full h-48 rounded-2xl overflow-hidden border border-white/10 bg-slate-950 flex items-center justify-center";
+            
+            const imgEl = document.createElement("img");
+            imgEl.className = "w-full h-full object-cover transition-opacity duration-300";
+            imgEl.src = paths[0];
+            imgEl.alt = fallbackAlt;
+            wrapper.appendChild(imgEl);
+            
+            if (paths.length > 1) {
+                let activeIdx = 0;
+                
+                const prevBtn = document.createElement("button");
+                prevBtn.className = "absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950/70 border border-white/10 flex items-center justify-center text-white hover:bg-slate-950 font-bold z-10 text-xs transition-colors";
+                prevBtn.innerHTML = "❮";
+                prevBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    activeIdx = (activeIdx - 1 + paths.length) % paths.length;
+                    imgEl.style.opacity = 0;
+                    setTimeout(() => {
+                        imgEl.src = paths[activeIdx];
+                        imgEl.style.opacity = 1;
+                        indicator.textContent = `${activeIdx + 1}/${paths.length}`;
+                    }, 150);
+                };
+                
+                const nextBtn = document.createElement("button");
+                nextBtn.className = "absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950/70 border border-white/10 flex items-center justify-center text-white hover:bg-slate-950 font-bold z-10 text-xs transition-colors";
+                nextBtn.innerHTML = "❯";
+                nextBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    activeIdx = (activeIdx + 1) % paths.length;
+                    imgEl.style.opacity = 0;
+                    setTimeout(() => {
+                        imgEl.src = paths[activeIdx];
+                        imgEl.style.opacity = 1;
+                        indicator.textContent = `${activeIdx + 1}/${paths.length}`;
+                    }, 150);
+                };
+                
+                const indicator = document.createElement("span");
+                indicator.className = "absolute bottom-2 right-2 px-2 py-0.5 rounded-lg bg-slate-950/80 text-[10px] text-slate-300 font-mono border border-white/5";
+                indicator.textContent = `1/${paths.length}`;
+                
+                wrapper.appendChild(prevBtn);
+                wrapper.appendChild(nextBtn);
+                wrapper.appendChild(indicator);
+            }
+            
+            container.appendChild(wrapper);
+        }
 
         window.onload = function() {
             renderHeaderAuth();
@@ -441,7 +521,7 @@
                 tr.innerHTML = `
                     <td class="py-3.5 px-4 font-mono font-bold text-slate-300">${r.id}</td>
                     <td class="py-3.5 px-4">
-                        <img src="${r.image_path}" class="w-10 h-10 object-cover rounded-xl border border-white/10" alt="thumbnail">
+                        <img src="${getFirstImagePath(r.image_path)}" class="w-10 h-10 object-cover rounded-xl border border-white/10" alt="thumbnail">
                     </td>
                     <td class="py-3.5 px-4 text-xs text-slate-400">${new Date(r.created_at).toLocaleDateString()}</td>
                     <td class="py-3.5 px-4 font-semibold text-slate-200">${r.department}</td>
@@ -461,7 +541,7 @@
             if (!r) return;
 
             document.getElementById("modalTitle").textContent = `Report Details - ${r.id}`;
-            document.getElementById("modalBeforeImage").src = r.image_path;
+            renderImageCarousel("beforeCarouselContainer", r.image_path, "Before");
             
             if (r.status === 'Resolved' && r.resolved_image_path) {
                 document.getElementById("modalAfterContainer").classList.remove("hidden");

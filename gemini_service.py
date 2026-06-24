@@ -8,25 +8,24 @@ API_KEY = os.environ.get("GOOGLE_API_KEY")
 if API_KEY:
     genai.configure(api_key=API_KEY)
 
-def analyze_report_image(image_bytes: bytes) -> dict:
+def analyze_report_images(images_bytes: list, user_note: str = None) -> dict:
     """
-    Sends before image to Gemini Vision to describe the hazard details (Stage 1),
-    then parses that description into structured JSON metadata (Stage 2).
+    Processes multiple images through Stage 1 (Vision details extraction),
+    then aggregates all descriptions and user_note through Stage 2 (Text classification JSON).
     """
     if not API_KEY:
-        # Fallback dictionary for testing without API key
         return {
             "tags": ["Pothole", "Broken Asphalt"],
             "department": "Roads & Traffic",
             "priority": 4,
-            "analysis": "A deep pothole (approximately 1 meter wide) blocking traffic on the secondary lane."
+            "analysis": f"A deep pothole (approximately 1 meter wide) blocking traffic on the secondary lane. User note: {user_note or 'None'}"
         }
-    
+        
     try:
         model = genai.GenerativeModel("gemini-2.5-flash")
-        image = Image.open(io.BytesIO(image_bytes))
         
-        # --- Stage 1: Vision-Only Physical Description ---
+        # --- Stage 1: Vision-Only Physical Description for each image ---
+        descriptions = []
         vision_prompt = """
         You are an expert civic infrastructure inspector.
         Analyze this image of a municipal hazard.
@@ -35,21 +34,29 @@ def analyze_report_image(image_bytes: bytes) -> dict:
         Instead, focus on describing:
         1. The exact type of hazard (e.g. pothole, broken streetlight, fallen tree, overflow trash, water leakage).
         2. The material and context (e.g. asphalt, concrete road, overhead wires, metal pole).
-        3. The physical scale, dimensions, or size of the problem (e.g. 'approx. 1 meter wide pothole', 'entire street blocked', 'tree branches leaning on a power line').
-        4. The immediate severity and visual danger clues (e.g. exposed wires, deep hole, blocking active traffic).
-        Your description should be extremely concise (2-4 sentences max) and contain only factual visual observations.
+        3. The physical scale, dimensions, or size of the problem (e.g. 'approx. 1 meter wide pothole', 'tree branches leaning on a power line').
+        4. The immediate severity and danger clues.
+        Your description should be extremely concise (2-3 sentences max) and contain only factual visual observations.
         """
         
-        vision_response = model.generate_content([vision_prompt, image])
-        visual_description = vision_response.text.strip()
+        for idx, img_bytes in enumerate(images_bytes):
+            image = Image.open(io.BytesIO(img_bytes))
+            response = model.generate_content([vision_prompt, image])
+            desc = response.text.strip()
+            descriptions.append(f"Image {idx + 1} Visual Description: {desc}")
+            
+        aggregated_descriptions = "\n\n".join(descriptions)
         
         # --- Stage 2: Text-Only Classification and Structuring ---
         text_prompt = f"""
         You are a municipal dispatch assistant.
-        Based on the following factual visual description of a civic hazard, classify the issue and format the result.
+        Analyze the following visual description(s) of a civic hazard, and incorporate the reporter's personal note if provided.
         
-        Visual Description:
-        "{visual_description}"
+        Visual Description(s):
+        {aggregated_descriptions}
+        
+        Reporter's Note:
+        "{user_note or 'No note provided'}"
         
         You MUST return a valid JSON object matching this structure:
         {{
@@ -82,13 +89,15 @@ def analyze_report_image(image_bytes: bytes) -> dict:
         return json.loads(text_output)
         
     except Exception as e:
-        # Graceful fallback on API or parsing failures
         return {
             "tags": ["unknown"],
             "department": "Other",
             "priority": 1,
-            "analysis": f"Failed to process two-stage AI diagnostics: {str(e)}"
+            "analysis": f"Failed to process multi-image two-stage AI diagnostics: {str(e)}"
         }
+
+def analyze_report_image(image_bytes: bytes) -> dict:
+    return analyze_report_images([image_bytes])
 
 def verify_resolution(before_bytes: bytes, after_bytes: bytes) -> dict:
     """
