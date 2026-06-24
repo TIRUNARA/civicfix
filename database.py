@@ -84,7 +84,8 @@ def init_db():
         votes INTEGER DEFAULT 1,
         status TEXT NOT NULL,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        description TEXT
     )
     """)
     
@@ -92,6 +93,7 @@ def init_db():
     if conn.is_pg:
         cursor.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS reporter_email TEXT")
         cursor.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS reporter_name TEXT")
+        cursor.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS description TEXT")
     else:
         try:
             cursor.execute("ALTER TABLE reports ADD COLUMN reporter_email TEXT")
@@ -99,6 +101,10 @@ def init_db():
             pass
         try:
             cursor.execute("ALTER TABLE reports ADD COLUMN reporter_name TEXT")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE reports ADD COLUMN description TEXT")
         except Exception:
             pass
 

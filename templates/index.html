@@ -359,9 +359,23 @@
         function getFirstImagePath(pathString) {
             if (!pathString) return "";
             try {
-                const paths = JSON.parse(pathString);
-                return Array.isArray(paths) ? (paths[0] || "") : pathString;
+                let parsed = JSON.parse(pathString);
+                if (typeof parsed === "string") {
+                    try {
+                        parsed = JSON.parse(parsed);
+                    } catch(e) {}
+                }
+                if (Array.isArray(parsed)) {
+                    return parsed[0] || "";
+                }
+                return parsed;
             } catch(e) {
+                if (pathString.startsWith('[') && pathString.endsWith(']')) {
+                    try {
+                        const match = pathString.match(/"([^"]+)"/);
+                        if (match) return match[1];
+                    } catch(err) {}
+                }
                 return pathString;
             }
         }
@@ -869,11 +883,11 @@
             if (pollingInterval) clearInterval(pollingInterval);
         }
 
-        // Direct upload: send to /api/reports/analyze first
+        // Direct upload: send to /api/reports/submit directly (async)
         async function submitDirectReportImage() {
             const fileInput = document.getElementById("directFile");
             if (!fileInput.files || fileInput.files.length === 0) {
-                alert("Please select at least one photo to analyze.");
+                alert("Please select at least one photo.");
                 return;
             }
             const files = Array.from(fileInput.files);
@@ -893,27 +907,31 @@
                     formData.append("user_note", userNote);
                 }
                 
-                fetch("/api/reports/analyze", {
+                // Add reporter info if logged in (from localStorage "user")
+                const localUser = JSON.parse(localStorage.getItem("user") || "null");
+                if (localUser) {
+                    formData.append("reporter_email", localUser.email);
+                    formData.append("reporter_name", localUser.name);
+                    formData.append("reporter_avatar", localUser.avatar || "");
+                }
+                
+                fetch("/api/reports/submit", {
                     method: "POST",
                     body: formData
                 })
-                .then(res => res.json())
-                .then(aiData => {
+                .then(res => {
+                    if (!res.ok) throw new Error("Submission failed");
+                    return res.json();
+                })
+                .then(result => {
                     showLoader(false);
-                    
-                    // Cache direct files & position context
-                    wizardFiles = files;
-                    wizardImagePath = null;
-                    wizardLat = latitude;
-                    wizardLng = longitude;
-                    
-                    // Create temporary preview URLs for display
-                    const previewUrls = files.map(f => URL.createObjectURL(f));
-                    openWizard(previewUrls, latitude, longitude, aiData.tags, aiData.department, aiData.priority, aiData.analysis);
+                    alert("Report successfully registered! AI diagnostics is running in the background.");
+                    loadReports();
+                    loadLeaderboard();
                 })
                 .catch(err => {
                     showLoader(false);
-                    alert("AI analysis request failed. Try again.");
+                    alert("Report submission failed. Please try again.");
                 });
             };
 

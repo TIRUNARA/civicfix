@@ -566,7 +566,17 @@
         async function initializeDesktopStep1() {
             // Generate QR Code session
             try {
-                const resp = await fetch("/api/sessions/create", { method: "POST" });
+                const headers = { "Content-Type": "application/json" };
+                const body = currentUser ? JSON.stringify({
+                    reporter_email: currentUser.email,
+                    reporter_name: currentUser.name,
+                    reporter_avatar: currentUser.avatar
+                }) : null;
+                const resp = await fetch("/api/sessions/create", {
+                    method: "POST",
+                    headers: headers,
+                    body: body
+                });
                 const data = await resp.json();
                 activeSessionToken = data.token;
                 
@@ -605,14 +615,14 @@
                     clearInterval(pollingInterval);
                     showToast("🎉 Remote report submitted successfully!", "success");
                     showSuccessScreen({
-                        id: "CF-Remote",
+                        id: data.associated_report_id || "CF-Remote",
                         department: "Synced Device",
                     });
                 }
             }, 2000);
         }
 
-        function handleDirectUpload(input) {
+        async function handleDirectUpload(input) {
             if (!input.files || input.files.length === 0) return;
             const files = Array.from(input.files);
             
@@ -622,46 +632,59 @@
             document.getElementById("stepDot1").className = "w-8 h-8 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center font-bold text-sm";
             document.getElementById("stepDot2").className = "w-8 h-8 rounded-full bg-accent text-slate-950 flex items-center justify-center font-bold text-sm shadow-lg";
 
-            // Geolocation and submit to analyze
+            // Geolocation and submit to submit endpoint
             navigator.geolocation.getCurrentPosition(
-                (pos) => runAIAnalysis(files, pos.coords.latitude, pos.coords.longitude),
+                (pos) => submitReportAsync(files, pos.coords.latitude, pos.coords.longitude),
                 () => {
                     // Fallback to Bengaluru default coords
                     showToast("ℹ️ GPS unavailable, using default city center.", "info");
-                    runAIAnalysis(files, 12.9716, 77.5946);
+                    submitReportAsync(files, 12.9716, 77.5946);
                 }
             );
         }
 
-        async function runAIAnalysis(files, lat, lng) {
+        async function submitReportAsync(files, lat, lng) {
             const formData = new FormData();
             files.forEach(f => {
                 formData.append("images", f);
             });
+            formData.append("latitude", lat);
+            formData.append("longitude", lng);
+            
             const userNote = document.getElementById("directUserNote") ? document.getElementById("directUserNote").value : "";
             if (userNote) {
                 formData.append("user_note", userNote);
             }
+            
+            const email = currentUser ? currentUser.email : "anonymous@civicfix.org";
+            const name = currentUser ? currentUser.name : "Anonymous";
+            const avatar = currentUser ? currentUser.avatar : "";
+            formData.append("reporter_email", email);
+            formData.append("reporter_name", name);
+            formData.append("reporter_avatar", avatar);
+            
+            if (activeSessionToken) {
+                formData.append("token", activeSessionToken);
+            }
 
             try {
-                const resp = await fetch("/api/reports/analyze", {
+                showToast("⚙️ Submitting report to queue...", "info");
+                const resp = await fetch("/api/reports/submit", {
                     method: "POST",
                     body: formData
                 });
                 if (!resp.ok) {
-                    throw new Error("AI Analysis request failed.");
+                    throw new Error("Report submission failed.");
                 }
-                const data = await resp.json();
+                const result = await resp.json();
                 
-                wizardFiles = files;
-                wizardImagePath = null;
-                wizardLat = lat;
-                wizardLng = lng;
-
-                const previewUrls = files.map(f => URL.createObjectURL(f));
-                openWizard(previewUrls, lat, lng, data.tags, data.department, data.priority, data.analysis);
-            } catch(err) {
-                showToast("❌ Vision AI analysis failed. Please try again.", "error");
+                showToast("🎉 Report successfully queued for AI diagnostics!", "success");
+                showSuccessScreen({
+                    id: result.id,
+                    department: "Processing (AI Analyzing...)"
+                });
+            } catch (err) {
+                showToast("❌ Submission failed. Please try again.", "error");
                 backToStep1();
             }
         }

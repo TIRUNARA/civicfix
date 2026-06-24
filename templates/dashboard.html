@@ -264,9 +264,23 @@
         function getFirstImagePath(pathString) {
             if (!pathString) return "";
             try {
-                const paths = JSON.parse(pathString);
-                return Array.isArray(paths) ? (paths[0] || "") : pathString;
+                let parsed = JSON.parse(pathString);
+                if (typeof parsed === "string") {
+                    try {
+                        parsed = JSON.parse(parsed);
+                    } catch(e) {}
+                }
+                if (Array.isArray(parsed)) {
+                    return parsed[0] || "";
+                }
+                return parsed;
             } catch(e) {
+                if (pathString.startsWith('[') && pathString.endsWith(']')) {
+                    try {
+                        const match = pathString.match(/"([^"]+)"/);
+                        if (match) return match[1];
+                    } catch(err) {}
+                }
                 return pathString;
             }
         }
@@ -457,6 +471,54 @@
             }
         }
 
+        let dashboardPollingInterval = null;
+        function setupDashboardPolling(start) {
+            if (dashboardPollingInterval) {
+                clearInterval(dashboardPollingInterval);
+                dashboardPollingInterval = null;
+            }
+            if (start && currentUser) {
+                dashboardPollingInterval = setInterval(async () => {
+                    const email = currentUser.email;
+                    try {
+                        const rResp = await fetch(`/api/reports/my-reports/${email}`);
+                        const reports = await rResp.json();
+                        activeReports = reports;
+                        
+                        // Update metrics
+                        const filed = reports.length;
+                        const resolved = reports.filter(r => r.status === 'Resolved').length;
+                        document.getElementById("userReportsFiled").textContent = filed;
+                        document.getElementById("userReportsResolved").textContent = resolved;
+                        
+                        renderReportsTable(reports);
+                        
+                        // Update open modal if necessary
+                        const modal = document.getElementById("detailModal");
+                        if (modal && !modal.classList.contains("opacity-0")) {
+                            const titleText = document.getElementById("modalTitle").textContent;
+                            const match = titleText.match(/CF-[A-Z0-9]+/);
+                            if (match) {
+                                const currentId = match[0];
+                                const updatedReport = reports.find(x => x.id === currentId);
+                                if (updatedReport && updatedReport.status !== 'Processing') {
+                                    openDetailModal(currentId);
+                                }
+                            }
+                        }
+
+                        const stillProcessing = reports.some(r => r.status === 'Processing');
+                        if (!stillProcessing) {
+                            clearInterval(dashboardPollingInterval);
+                            dashboardPollingInterval = null;
+                        }
+                    } catch(e) {
+                        console.error("Error polling dashboard data", e);
+                    }
+                }, 3000);
+            }
+        }
+
         // User specific dashboard loading
         async function loadDashboardData() {
             try {
@@ -487,6 +549,10 @@
                 // Render Table list
                 renderReportsTable(reports);
 
+                // Setup polling if there are any pending background tasks
+                const hasProcessing = reports.some(r => r.status === 'Processing');
+                setupDashboardPolling(hasProcessing);
+
             } catch(e) {
                 console.error("Failed to load dashboard data", e);
             }
@@ -509,6 +575,7 @@
                 let statusColor = "bg-amber-500/20 text-amber-400";
                 if (r.status === 'Resolved') statusColor = "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
                 else if (r.status === 'Work in Progress' || r.status === 'Underway') statusColor = "bg-blue-500/20 text-blue-400";
+                else if (r.status === 'Processing') statusColor = "bg-indigo-500/20 text-indigo-300 animate-pulse border border-indigo-500/30";
 
                 const tr = document.createElement("tr");
                 tr.className = "hover:bg-white/5 transition-colors cursor-pointer";
@@ -561,6 +628,7 @@
             let statusColor = "bg-amber-500/20 text-amber-400";
             if (r.status === 'Resolved') statusColor = "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
             else if (r.status === 'Work in Progress' || r.status === 'Underway') statusColor = "bg-blue-500/20 text-blue-400";
+            else if (r.status === 'Processing') statusColor = "bg-indigo-500/20 text-indigo-300 animate-pulse border border-indigo-500/30";
             statusLabel.className = `inline-block mt-0.5 px-2.5 py-0.5 rounded text-[11px] font-bold ${statusColor}`;
 
             // Tags
@@ -584,7 +652,7 @@
             const role = document.getElementById("roleToggle").value;
             footerActions.innerHTML = `<button onclick="closeDetailModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all">Close</button>`;
             
-            if (role === 'officer' && r.status !== 'Resolved') {
+            if (role === 'officer' && r.status !== 'Resolved' && r.status !== 'Processing') {
                 const resolveBtn = document.createElement("button");
                 resolveBtn.className = "bg-accent hover:bg-[#00c294] text-slate-950 px-4 py-2 font-bold rounded-xl text-xs transition-all shadow-md";
                 resolveBtn.textContent = "👮 Verify Resolve (Upload Photo)";

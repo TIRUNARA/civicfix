@@ -149,6 +149,9 @@
                         <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-300">
                             <input type="checkbox" class="status-filter" value="Resolved" checked onchange="applyFilters()"> Resolved
                         </label>
+                        <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-300">
+                            <input type="checkbox" class="status-filter" value="Processing" checked onchange="applyFilters()"> Processing
+                        </label>
                     </div>
                 </div>
 
@@ -167,6 +170,12 @@
                         </label>
                         <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
                             <input type="checkbox" class="dept-filter" value="Parks" checked onchange="applyFilters()"> Public Parks & Spaces
+                        </label>
+                        <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
+                            <input type="checkbox" class="dept-filter" value="Other" checked onchange="applyFilters()"> Other Hazards
+                        </label>
+                        <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
+                            <input type="checkbox" class="dept-filter" value="Processing" checked onchange="applyFilters()"> Processing (AI Analyzing)
                         </label>
                     </div>
                 </div>
@@ -272,9 +281,23 @@
         function getFirstImagePath(pathString) {
             if (!pathString) return "";
             try {
-                const paths = JSON.parse(pathString);
-                return Array.isArray(paths) ? (paths[0] || "") : pathString;
+                let parsed = JSON.parse(pathString);
+                if (typeof parsed === "string") {
+                    try {
+                        parsed = JSON.parse(parsed);
+                    } catch(e) {}
+                }
+                if (Array.isArray(parsed)) {
+                    return parsed[0] || "";
+                }
+                return parsed;
             } catch(e) {
+                if (pathString.startsWith('[') && pathString.endsWith(']')) {
+                    try {
+                        const match = pathString.match(/"([^"]+)"/);
+                        if (match) return match[1];
+                    } catch(err) {}
+                }
                 return pathString;
             }
         }
@@ -351,9 +374,11 @@
 
         const statusColors = {
             'Pending': '#f59e0b',
+            'Reported': '#f59e0b',
             'Underway': '#3b82f6',
             'Work in Progress': '#3b82f6',
-            'Resolved': '#10b981'
+            'Resolved': '#10b981',
+            'Processing': '#818cf8'
         };
 
         window.onload = function() {
@@ -417,14 +442,67 @@
             }
         }
 
+        let mapPollingInterval = null;
+        function setupMapPolling(start) {
+            if (mapPollingInterval) {
+                clearInterval(mapPollingInterval);
+                mapPollingInterval = null;
+            }
+            if (start) {
+                mapPollingInterval = setInterval(async () => {
+                    try {
+                        const resp = await fetch("/api/reports/list");
+                        allReports = await resp.json();
+                        applyFilters();
+
+                        // If details modal is open, refresh it if status changed
+                        const modal = document.getElementById("detailModal");
+                        if (modal && !modal.classList.contains("opacity-0")) {
+                            const titleText = document.getElementById("modalTitle").textContent;
+                            const match = titleText.match(/CF-[A-Z0-9]+/);
+                            if (match) {
+                                const currentId = match[0];
+                                const updatedReport = allReports.find(x => x.id === currentId);
+                                if (updatedReport && updatedReport.status !== 'Processing') {
+                                    openDetailModal(currentId);
+                                }
+                            }
+                        }
+
+                        const stillProcessing = allReports.some(r => r.status === 'Processing');
+                        if (!stillProcessing) {
+                            clearInterval(mapPollingInterval);
+                            mapPollingInterval = null;
+                        }
+                    } catch(e) {
+                        console.error("Map polling error", e);
+                    }
+                }, 3000);
+            }
+        }
+
         async function loadReportsData() {
             try {
                 const resp = await fetch("/api/reports/list");
                 allReports = await resp.json();
                 applyFilters();
+
+                const hasProcessing = allReports.some(r => r.status === 'Processing');
+                setupMapPolling(hasProcessing);
             } catch(e) {
                 showToast("❌ Failed to fetch map hazards list.", "error");
             }
+        }
+
+        function normalizeDepartment(dept) {
+            if (!dept) return "Other";
+            const d = dept.toLowerCase();
+            if (d.includes("road") || d.includes("traffic")) return "Roads";
+            if (d.includes("sanitation") || d.includes("waste") || d.includes("garbage")) return "Sanitation";
+            if (d.includes("electric") || d.includes("water") || d.includes("utility")) return "Utilities";
+            if (d.includes("park") || d.includes("forest") || d.includes("space")) return "Parks";
+            if (d.includes("processing")) return "Processing";
+            return "Other";
         }
 
         function applyFilters() {
@@ -442,10 +520,17 @@
             let matches = allReports.filter(r => {
                 // Uploads filter
                 if (myUploadsOnly && (!currentUser || r.reporter_email !== currentUser.email)) return false;
-                // Status filter
-                if (!checkedStatuses.includes(r.status)) return false;
+                
+                // Status filter - map Reported -> Pending in UI filter
+                let checkStatus = r.status;
+                if (checkStatus === 'Reported') {
+                    checkStatus = 'Pending';
+                }
+                if (!checkedStatuses.includes(checkStatus)) return false;
+                
                 // Dept filter
-                if (!checkedDepts.includes(r.department)) return false;
+                const normDept = normalizeDepartment(r.department);
+                if (!checkedDepts.includes(normDept)) return false;
                 // Priority filter
                 if (r.priority < minPriority) return false;
 
@@ -477,7 +562,7 @@
                 // Custom tooltip on hover with preview image and details
                 marker.bindTooltip(`
                     <div class="flex flex-col gap-1.5 w-44 text-slate-200 pointer-events-none">
-                        <img src="${getFirstImagePath(r.image_path)}" class="w-full h-20 object-cover rounded-lg border border-white/10 bg-slate-950">
+                        <img src="${getFirstImagePath(r.image_path)}" width="176" height="80" class="w-full h-20 object-cover rounded-lg border border-white/10 bg-slate-950">
                         <div class="flex justify-between items-center text-[9px] font-bold">
                             <span class="font-mono text-slate-300">${r.id}</span>
                             <span class="px-1 py-0.5 rounded text-[8px]" style="background-color: ${color}20; color: ${color}">${r.status}</span>
@@ -499,7 +584,7 @@
                             <span class="font-mono font-bold text-slate-300 text-xs">${r.id}</span>
                             <span class="text-3xs font-extrabold uppercase px-1.5 py-0.5 rounded" style="background-color: ${color}20; color: ${color}">${r.status}</span>
                         </div>
-                        <img src="${getFirstImagePath(r.image_path)}" class="w-full h-24 object-cover rounded-lg border border-white/10 shadow-md">
+                        <img src="${getFirstImagePath(r.image_path)}" width="208" height="96" class="w-full h-24 object-cover rounded-lg border border-white/10 shadow-md">
                         <p class="text-2xs text-slate-300 line-clamp-2">${r.description || 'No description'}</p>
                         <button onclick="window.openDetailModal('${r.id}')" class="w-full text-center bg-accent hover:bg-[#00c294] text-slate-950 font-bold py-1.5 rounded-lg text-2xs transition-all shadow">Inspect Hazard</button>
                     </div>
@@ -610,7 +695,7 @@
             const role = document.getElementById("roleToggle").value;
             footerActions.innerHTML = `<button onclick="closeDetailModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all">Close</button>`;
             
-            if (role === 'officer' && r.status !== 'Resolved') {
+            if (role === 'officer' && r.status !== 'Resolved' && r.status !== 'Processing') {
                 const resolveBtn = document.createElement("button");
                 resolveBtn.className = "bg-accent hover:bg-[#00c294] text-slate-950 px-4 py-2 font-bold rounded-xl text-xs transition-all shadow-md";
                 resolveBtn.textContent = "👮 Verify Resolve";
