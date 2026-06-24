@@ -312,6 +312,22 @@ from fastapi.staticfiles import StaticFiles
 app.mount("/tmp/uploads", StaticFiles(directory="/tmp/uploads"), name="uploads")
 
 @app.get("/", response_class=HTMLResponse)
-async def serve_index():
-    with open("templates/index.html", "r") as f:
+async def serve_dashboard():
+    with open("templates/dashboard.html", "r") as f:
         return HTMLResponse(content=f.read())
+
+@app.get("/map", response_class=HTMLResponse)
+async def serve_map():
+    with open("templates/map.html", "r") as f:
+        return HTMLResponse(content=f.read())
+
+@app.get("/report", response_class=HTMLResponse)
+async def serve_report():
+    with open("templates/report.html", "r") as f:
+        return HTMLResponse(content=f.read())
+
+@app.get("/leaderboard", response_class=HTMLResponse)
+async def serve_leaderboard():
+    with open("templates/leaderboard.html", "r") as f:
+        return HTMLResponse(content=f.read())
+

@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CivicFix - Personal Dashboard</title>
+    <!-- Tailwind & Google Fonts -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #020617; 
+            color: #f8fafc; 
+        }
+        h1, h2, h3, h4, h5, h6 { 
+            font-family: 'Outfit', sans-serif; 
+        }
+        .glass-panel { 
+            background: rgba(15, 23, 42, 0.65); 
+            backdrop-filter: blur(16px); 
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08); 
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(8px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .glass-card:hover {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(0, 229, 176, 0.25);
+            box-shadow: 0 0 20px rgba(0, 229, 176, 0.08);
+            transform: translateY(-2px);
+        }
+        .text-accent {
+            color: #00E5B0;
+        }
+        .bg-accent {
+            background-color: #00E5B0;
+        }
+        .border-accent {
+            border-color: #00E5B0;
+        }
+        .focus-accent:focus {
+            outline: none;
+            ring: 2px solid #00E5B0;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+
+    <!-- Global Header -->
+    <header class="glass-panel sticky top-0 z-50 flex items-center justify-between px-6 py-4 border-b border-white/10">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#00E5B0] to-cyan-500 flex items-center justify-center font-black text-lg text-slate-950 shadow-lg">CF</div>
+            <span class="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">CivicFix</span>
+        </div>
+        <nav class="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-300">
+            <a href="/" class="text-accent hover:text-white transition-colors">Dashboard</a>
+            <a href="/map" class="hover:text-white transition-colors">Map Explorer</a>
+            <a href="/leaderboard" class="hover:text-white transition-colors">Leaderboard</a>
+        </nav>
+        <div class="flex items-center gap-4">
+            <a href="/report" class="bg-accent hover:bg-[#00c294] text-slate-950 font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg text-sm flex items-center gap-1.5 hover:scale-[1.02] active:scale-[0.98]">
+                📸 Report Hazard
+            </a>
+            
+            <select id="roleToggle" class="bg-slate-900/80 border border-white/10 text-white rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-[#00E5B0] font-semibold cursor-pointer" onchange="toggleRole()">
+                <option value="citizen">Citizen Mode</option>
+                <option value="officer">Officer Portal</option>
+            </select>
+
+            <div id="authContainer" class="flex items-center gap-2"></div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 w-full max-w-7xl mx-auto px-4 py-8">
+
+        <!-- 1. Logged Out Landing View -->
+        <section id="landingView" class="hidden flex flex-col items-center justify-center text-center py-12 space-y-8">
+            <div class="space-y-4 max-w-3xl">
+                <h1 class="text-5xl md:text-6xl font-extrabold tracking-tight leading-tight">
+                    Empower Your Community with <br>
+                    <span class="bg-gradient-to-r from-[#00E5B0] to-cyan-400 bg-clip-text text-transparent">AI-Driven Civic Action</span>
+                </h1>
+                <p class="text-slate-400 text-lg md:text-xl max-w-xl mx-auto">
+                    Report municipal hazards, verify infrastructural issues using Gemini Vision AI, and improve your city.
+                </p>
+            </div>
+
+            <!-- Global Stats Dashboard -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-4xl px-4">
+                <div class="glass-card rounded-2xl p-6 flex flex-col items-center">
+                    <span class="text-4xl font-extrabold text-[#00E5B0]" id="statTotal">...</span>
+                    <span class="text-slate-400 font-semibold text-sm mt-1 uppercase tracking-wider">Total Reports</span>
+                </div>
+                <div class="glass-card rounded-2xl p-6 flex flex-col items-center">
+                    <span class="text-4xl font-extrabold text-[#00E5B0]" id="statFixed">...</span>
+                    <span class="text-slate-400 font-semibold text-sm mt-1 uppercase tracking-wider">Fixed Hazards</span>
+                </div>
+                <div class="glass-card rounded-2xl p-6 flex flex-col items-center">
+                    <span class="text-4xl font-extrabold text-[#00E5B0]" id="statUsers">...</span>
+                    <span class="text-slate-400 font-semibold text-sm mt-1 uppercase tracking-wider">Active Citizens</span>
+                </div>
+            </div>
+
+            <!-- Login Card -->
+            <div class="glass-panel max-w-sm w-full p-8 rounded-3xl border border-white/10 space-y-6">
+                <h2 class="text-xl font-bold text-center">Sign in to start reporting</h2>
+                <div class="flex flex-col gap-3">
+                    <div id="googleBtnWrapper" class="flex justify-center">
+                        <div id="g-signin-btn"></div>
+                    </div>
+                    <div class="relative flex py-2 items-center">
+                        <div class="flex-grow border-t border-white/5"></div>
+                        <span class="flex-shrink mx-4 text-slate-500 text-xs uppercase tracking-wider font-semibold">Or</span>
+                        <div class="flex-grow border-t border-white/5"></div>
+                    </div>
+                    <button onclick="triggerMockLogin()" class="w-full py-3 bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 text-[#00E5B0] hover:from-emerald-500/20 hover:to-cyan-500/20 font-bold rounded-xl text-sm transition-all shadow-md active:scale-[0.98]">
+                        🔑 Instant Demo Sign In
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. Logged In Dashboard View -->
+        <section id="dashboardView" class="hidden space-y-8">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 class="text-3xl font-extrabold" id="welcomeMsg">Welcome, Citizen</h1>
+                    <p class="text-slate-400 text-sm">Monitor your reports, scores, and verification status.</p>
+                </div>
+                <a href="/report" class="bg-accent hover:bg-[#00c294] text-slate-950 font-bold px-5 py-3 rounded-xl transition-all shadow-lg text-sm flex items-center justify-center gap-2 self-start md:self-auto hover:scale-[1.02] active:scale-[0.98]">
+                    📸 Report a New Hazard
+                </a>
+            </div>
+
+            <!-- User Metrics bar -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="glass-card rounded-2xl p-5 flex flex-col">
+                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Reports Filed</span>
+                    <span class="text-3xl font-extrabold text-white mt-1" id="userReportsFiled">0</span>
+                </div>
+                <div class="glass-card rounded-2xl p-5 flex flex-col">
+                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Verified Fixed</span>
+                    <span class="text-3xl font-extrabold text-white mt-1" id="userReportsResolved">0</span>
+                </div>
+                <div class="glass-card rounded-2xl p-5 flex flex-col">
+                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Earned Points</span>
+                    <span class="text-3xl font-extrabold text-[#00E5B0] mt-1" id="userPoints">0</span>
+                </div>
+                <div class="glass-card rounded-2xl p-5 flex flex-col">
+                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Citizen Rank</span>
+                    <span class="text-3xl font-extrabold text-white mt-1" id="userRank">#--</span>
+                </div>
+            </div>
+
+            <!-- Uploads feed table -->
+            <div class="glass-panel rounded-3xl border border-white/10 p-6 space-y-4">
+                <div class="flex items-center justify-between border-b border-white/5 pb-4">
+                    <h2 class="text-lg font-bold">My Filed Hazard Reports</h2>
+                    <span class="text-slate-500 text-xs" id="reportsCountLabel">0 reports found</span>
+                </div>
+                
+                <div class="overflow-x-auto w-full">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="text-2xs uppercase tracking-wider text-slate-500 border-b border-white/5">
+                                <th class="py-3 px-4">Report ID</th>
+                                <th class="py-3 px-4">Preview</th>
+                                <th class="py-3 px-4">Timestamp</th>
+                                <th class="py-3 px-4">Department</th>
+                                <th class="py-3 px-4">Priority</th>
+                                <th class="py-3 px-4">Status</th>
+                                <th class="py-3 px-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="myReportsTableBody" class="divide-y divide-white/5 text-sm">
+                            <!-- Dynamically loaded -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="noReportsState" class="hidden text-center py-8 text-slate-500 italic text-sm">
+                    You haven't submitted any reports yet. Click "Report Hazard" to make your first report!
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Detail Modal -->
+    <div id="detailModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="glass-panel w-full max-w-2xl rounded-3xl border border-white/10 overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-white/10">
+                <h3 class="text-lg font-bold" id="modalTitle">Report Details</h3>
+                <button onclick="closeDetailModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5">&times;</button>
+            </div>
+            <div class="p-6 overflow-y-auto space-y-6 flex-1">
+                <!-- Double view before/after -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">Original Hazard Image</span>
+                        <img id="modalBeforeImage" class="w-full h-48 object-cover rounded-2xl border border-white/10 bg-slate-900" src="" alt="Before">
+                    </div>
+                    <div id="modalAfterContainer" class="hidden">
+                        <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block mb-2 text-[#00E5B0]">AI Verified Resolution</span>
+                        <img id="modalAfterImage" class="w-full h-48 object-cover rounded-2xl border border-white/10 bg-slate-900" src="" alt="After">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                        <span class="text-slate-500 font-semibold block uppercase">Department</span>
+                        <span class="text-slate-200 font-bold text-sm" id="modalDept">...</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 font-semibold block uppercase">Status</span>
+                        <span id="modalStatus" class="inline-block mt-0.5 px-2.5 py-0.5 rounded text-[11px] font-bold">...</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 font-semibold block uppercase">Priority Level</span>
+                        <span class="text-slate-200 font-bold" id="modalPriority">...</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 font-semibold block uppercase">Date Filed</span>
+                        <span class="text-slate-200" id="modalDate">...</span>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">AI Diagnostic Report</span>
+                    <p class="text-slate-300 text-sm leading-relaxed p-4 bg-slate-900/60 rounded-2xl border border-white/5" id="modalDesc">...</p>
+                </div>
+
+                <div class="space-y-2">
+                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">Diagnostics Tags</span>
+                    <div class="flex flex-wrap gap-1.5" id="modalTags"></div>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-white/10 flex justify-end gap-3" id="modalFooterActions">
+                <!-- Officer action injected -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Unified Toast Notification System -->
+    <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-2 opacity-0 pointer-events-none transition-all duration-300 bg-slate-900 border border-white/10 text-slate-200 px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3">
+        <div id="toastIcon" class="w-5 h-5 flex items-center justify-center font-bold"></div>
+        <div id="toastMsg" class="text-xs font-semibold"></div>
+    </div>
+
+    <!-- Script Block -->
+    <script>
+        let currentUser = JSON.parse(localStorage.getItem("user") || "null");
+        let activeReports = [];
+
+        window.onload = function() {
+            renderHeaderAuth();
+            initializeGoogleSignIn();
+            loadGlobalStats();
+            
+            if (currentUser) {
+                document.getElementById("landingView").classList.add("hidden");
+                document.getElementById("dashboardView").classList.remove("hidden");
+                document.getElementById("welcomeMsg").textContent = `Welcome back, ${currentUser.name}`;
+                loadDashboardData();
+            } else {
+                document.getElementById("landingView").classList.remove("hidden");
+                document.getElementById("dashboardView").classList.add("hidden");
+            }
+        };
+
+        // Google Sign-In setup
+        function initializeGoogleSignIn() {
+            if (window.google) {
+                google.accounts.id.initialize({
+                    client_id: "67665301986-dummy.apps.googleusercontent.com",
+                    callback: handleCredentialResponse
+                });
+                google.accounts.id.renderButton(
+                    document.getElementById("g-signin-btn"),
+                    { theme: "dark", size: "large", width: 240 }
+                );
+            }
+        }
+
+        function handleCredentialResponse(response) {
+            try {
+                const base64Url = response.credential.split('.')[1];
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(''));
+                
+                const payload = JSON.parse(jsonPayload);
+                currentUser = {
+                    email: payload.email,
+                    name: payload.name,
+                    avatar: payload.picture
+                };
+                localStorage.setItem("user", JSON.stringify(currentUser));
+                showToast("✅ Successfully signed in with Google!", "success");
+                window.location.reload();
+            } catch (err) {
+                console.error("JWT decoding failed", err);
+                showToast("❌ Google Login failed.", "error");
+            }
+        }
+
+        function triggerMockLogin() {
+            currentUser = {
+                email: "shiva@civicfix.org",
+                name: "Shiva",
+                avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=shiva"
+            };
+            localStorage.setItem("user", JSON.stringify(currentUser));
+            showToast("🔑 Mock authentication session started!", "success");
+            window.location.reload();
+        }
+
+        function renderHeaderAuth() {
+            const container = document.getElementById("authContainer");
+            if (currentUser) {
+                container.innerHTML = `
+                    <div class="flex items-center gap-2.5 bg-slate-900/60 border border-white/10 py-1.5 px-3 rounded-full">
+                        <img src="${currentUser.avatar || 'https://www.gravatar.com/avatar?d=mp'}" class="w-7 h-7 rounded-full border border-[#00E5B0] shadow-md">
+                        <span class="font-bold text-xs text-slate-200 hidden md:inline">${currentUser.name}</span>
+                        <button onclick="handleLogout()" class="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase tracking-wider ml-1.5 transition-colors">Logout</button>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <button onclick="triggerLoginModal()" class="px-4 py-2 border border-white/20 text-slate-200 hover:text-white hover:border-white/30 rounded-xl text-xs font-bold transition-all">Sign In</button>
+                `;
+            }
+        }
+
+        function triggerLoginModal() {
+            // Smoothly scroll down to login widget on landing
+            if (!currentUser) {
+                document.getElementById("landingView").scrollIntoView({ behavior: 'smooth' });
+                showToast("👉 Please choose a login option below.", "info");
+            }
+        }
+
+        function handleLogout() {
+            localStorage.removeItem("user");
+            currentUser = null;
+            showToast("👋 Signed out successfully.", "info");
+            window.location.reload();
+        }
+
+        // Stats Loading
+        async function loadGlobalStats() {
+            try {
+                const resp = await fetch("/api/reports/list");
+                const all = await resp.json();
+                const total = all.length;
+                const fixed = all.filter(r => r.status === 'Resolved').length;
+                
+                const lResp = await fetch("/api/leaderboard");
+                const leaders = await lResp.json();
+                const activeCits = leaders.length;
+
+                document.getElementById("statTotal").textContent = total;
+                document.getElementById("statFixed").textContent = fixed;
+                document.getElementById("statUsers").textContent = activeCits;
+            } catch(e) {
+                console.error("Stats fetching failed", e);
+            }
+        }
+
+        // User specific dashboard loading
+        async function loadDashboardData() {
+            try {
+                const email = currentUser.email;
+                const rResp = await fetch(`/api/reports/my-reports/${email}`);
+                const reports = await rResp.json();
+                activeReports = reports;
+
+                // Set metrics
+                const filed = reports.length;
+                const resolved = reports.filter(r => r.status === 'Resolved').length;
+                document.getElementById("userReportsFiled").textContent = filed;
+                document.getElementById("userReportsResolved").textContent = resolved;
+
+                // Load points and rank from leaderboard
+                const lResp = await fetch("/api/leaderboard");
+                const leaders = await lResp.json();
+                
+                const myRankIdx = leaders.findIndex(l => l.email === email);
+                if (myRankIdx !== -1) {
+                    document.getElementById("userPoints").textContent = leaders[myRankIdx].civic_points;
+                    document.getElementById("userRank").textContent = `#${myRankIdx + 1}`;
+                } else {
+                    document.getElementById("userPoints").textContent = filed * 10 + resolved * 50;
+                    document.getElementById("userRank").textContent = `#--`;
+                }
+
+                // Render Table list
+                renderReportsTable(reports);
+
+            } catch(e) {
+                console.error("Failed to load dashboard data", e);
+            }
+        }
+
+        function renderReportsTable(reports) {
+            const tbody = document.getElementById("myReportsTableBody");
+            const noneState = document.getElementById("noReportsState");
+            tbody.innerHTML = "";
+
+            if (reports.length === 0) {
+                noneState.classList.remove("hidden");
+                document.getElementById("reportsCountLabel").textContent = "0 reports found";
+                return;
+            }
+            noneState.classList.add("hidden");
+            document.getElementById("reportsCountLabel").textContent = `${reports.length} reports found`;
+
+            reports.forEach(r => {
+                let statusColor = "bg-amber-500/20 text-amber-400";
+                if (r.status === 'Resolved') statusColor = "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+                else if (r.status === 'Work in Progress' || r.status === 'Underway') statusColor = "bg-blue-500/20 text-blue-400";
+
+                const tr = document.createElement("tr");
+                tr.className = "hover:bg-white/5 transition-colors cursor-pointer";
+                tr.onclick = (e) => {
+                    if (e.target.tagName !== 'BUTTON') {
+                        openDetailModal(r.id);
+                    }
+                };
+
+                tr.innerHTML = `
+                    <td class="py-3.5 px-4 font-mono font-bold text-slate-300">${r.id}</td>
+                    <td class="py-3.5 px-4">
+                        <img src="${r.image_path}" class="w-10 h-10 object-cover rounded-xl border border-white/10" alt="thumbnail">
+                    </td>
+                    <td class="py-3.5 px-4 text-xs text-slate-400">${new Date(r.created_at).toLocaleDateString()}</td>
+                    <td class="py-3.5 px-4 font-semibold text-slate-200">${r.department}</td>
+                    <td class="py-3.5 px-4"><span class="text-xs font-semibold px-2 py-0.5 bg-slate-800 rounded">Level ${r.priority}</span></td>
+                    <td class="py-3.5 px-4"><span class="px-2.5 py-1 rounded-full text-3xs font-bold uppercase ${statusColor}">${r.status}</span></td>
+                    <td class="py-3.5 px-4 text-right">
+                        <button onclick="openDetailModal('${r.id}')" class="text-xs text-[#00E5B0] hover:underline font-semibold bg-[#00E5B0]/10 hover:bg-[#00E5B0]/20 px-3 py-1.5 rounded-lg transition-all">Details</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Modal triggers
+        function openDetailModal(reportId) {
+            const r = activeReports.find(x => x.id === reportId);
+            if (!r) return;
+
+            document.getElementById("modalTitle").textContent = `Report Details - ${r.id}`;
+            document.getElementById("modalBeforeImage").src = r.image_path;
+            
+            if (r.status === 'Resolved' && r.resolved_image_path) {
+                document.getElementById("modalAfterContainer").classList.remove("hidden");
+                document.getElementById("modalAfterImage").src = r.resolved_image_path;
+            } else {
+                document.getElementById("modalAfterContainer").classList.add("hidden");
+            }
+
+            document.getElementById("modalDept").textContent = r.department;
+            document.getElementById("modalPriority").textContent = `Lvl ${r.priority}`;
+            document.getElementById("modalDate").textContent = new Date(r.created_at).toLocaleString();
+            document.getElementById("modalDesc").textContent = r.description || "No description provided.";
+            
+            // Render Status badge
+            const statusLabel = document.getElementById("modalStatus");
+            statusLabel.textContent = r.status;
+            let statusColor = "bg-amber-500/20 text-amber-400";
+            if (r.status === 'Resolved') statusColor = "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+            else if (r.status === 'Work in Progress' || r.status === 'Underway') statusColor = "bg-blue-500/20 text-blue-400";
+            statusLabel.className = `inline-block mt-0.5 px-2.5 py-0.5 rounded text-[11px] font-bold ${statusColor}`;
+
+            // Tags
+            const tagsBox = document.getElementById("modalTags");
+            tagsBox.innerHTML = "";
+            let tagsList = [];
+            try {
+                tagsList = JSON.parse(r.tags);
+            } catch(e) {
+                tagsList = Array.isArray(r.tags) ? r.tags : [r.tags];
+            }
+            tagsList.forEach(t => {
+                const badge = document.createElement("span");
+                badge.className = "bg-slate-800 text-slate-300 px-2 py-1 rounded text-2xs border border-white/5 font-semibold";
+                badge.textContent = `#${t}`;
+                tagsBox.appendChild(badge);
+            });
+
+            // Officer resolve action injection
+            const footerActions = document.getElementById("modalFooterActions");
+            const role = document.getElementById("roleToggle").value;
+            footerActions.innerHTML = `<button onclick="closeDetailModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all">Close</button>`;
+            
+            if (role === 'officer' && r.status !== 'Resolved') {
+                const resolveBtn = document.createElement("button");
+                resolveBtn.className = "bg-accent hover:bg-[#00c294] text-slate-950 px-4 py-2 font-bold rounded-xl text-xs transition-all shadow-md";
+                resolveBtn.textContent = "👮 Verify Resolve (Upload Photo)";
+                resolveBtn.onclick = () => triggerResolveUpload(r.id);
+                footerActions.appendChild(resolveBtn);
+            }
+
+            document.getElementById("detailModal").classList.remove("hidden");
+        }
+
+        function closeDetailModal() {
+            document.getElementById("detailModal").classList.add("hidden");
+        }
+
+        // Officer Resolve workflow
+        function triggerResolveUpload(reportId) {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = "image/*";
+            input.onchange = async () => {
+                closeDetailModal();
+                showToast("⚙️ AI is running visual verification on resolution...", "info");
+                
+                const formData = new FormData();
+                formData.append("resolved_image", input.files[0]);
+                
+                try {
+                    const resp = await fetch(`/api/reports/resolve/${reportId}`, {
+                        method: "POST",
+                        body: formData
+                    });
+                    const data = await resp.json();
+                    
+                    if (data.verified) {
+                        showToast("✅ AI Verified Success: " + data.explanation, "success");
+                    } else {
+                        showToast("❌ Verification Failed: " + data.explanation, "error");
+                    }
+                    loadDashboardData();
+                    loadGlobalStats();
+                } catch(e) {
+                    showToast("❌ Network error during resolution verification.", "error");
+                }
+            };
+            input.click();
+        }
+
+        // Custom responsive alerts toast
+        function showToast(msg, type) {
+            const toast = document.getElementById("toast");
+            const icon = document.getElementById("toastIcon");
+            const msgBox = document.getElementById("toastMsg");
+
+            msgBox.textContent = msg;
+            if (type === 'success') {
+                icon.textContent = "✓";
+                icon.className = "w-5 h-5 flex items-center justify-center font-bold text-emerald-400 bg-emerald-500/10 rounded-full";
+            } else if (type === 'error') {
+                icon.textContent = "✕";
+                icon.className = "w-5 h-5 flex items-center justify-center font-bold text-red-400 bg-red-500/10 rounded-full";
+            } else {
+                icon.textContent = "ℹ";
+                icon.className = "w-5 h-5 flex items-center justify-center font-bold text-blue-400 bg-blue-500/10 rounded-full";
+            }
+
+            toast.classList.remove("opacity-0", "translate-y-2", "pointer-events-none");
+            setTimeout(() => {
+                toast.classList.add("opacity-0", "translate-y-2", "pointer-events-none");
+            }, 4000);
+        }
+
+        function toggleRole() {
+            // Keep role preference preserved
+            const role = document.getElementById("roleToggle").value;
+            showToast(`🔄 Role switched to: ${role === 'officer' ? 'Municipal Officer' : 'Citizen'}`, "info");
+        }
+    </script>
+</body>
+</html>

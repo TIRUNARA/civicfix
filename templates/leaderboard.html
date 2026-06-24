@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CivicFix - Citizen Leaderboard</title>
+    <!-- Tailwind & Google Fonts -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #020617; 
+            color: #f8fafc; 
+        }
+        h1, h2, h3, h4, h5, h6 { 
+            font-family: 'Outfit', sans-serif; 
+        }
+        .glass-panel { 
+            background: rgba(15, 23, 42, 0.65); 
+            backdrop-filter: blur(16px); 
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08); 
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(8px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .glass-card:hover {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(0, 229, 176, 0.25);
+            box-shadow: 0 0 20px rgba(0, 229, 176, 0.08);
+            transform: translateY(-2px);
+        }
+        .text-accent {
+            color: #00E5B0;
+        }
+        .bg-accent {
+            background-color: #00E5B0;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen">
+
+    <!-- Global Header -->
+    <header class="glass-panel sticky top-0 z-50 flex items-center justify-between px-6 py-4 border-b border-white/10 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#00E5B0] to-cyan-500 flex items-center justify-center font-black text-lg text-slate-950 shadow-lg">CF</div>
+            <span class="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">CivicFix</span>
+        </div>
+        <nav class="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-300">
+            <a href="/" class="hover:text-white transition-colors">Dashboard</a>
+            <a href="/map" class="hover:text-white transition-colors">Map Explorer</a>
+            <a href="/leaderboard" class="text-accent hover:text-white transition-colors">Leaderboard</a>
+        </nav>
+        <div class="flex items-center gap-4">
+            <a href="/report" class="bg-accent hover:bg-[#00c294] text-slate-950 font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg text-sm flex items-center gap-1.5 hover:scale-[1.02] active:scale-[0.98]">
+                📸 Report Hazard
+            </a>
+            <div id="authContainer" class="flex items-center gap-2"></div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 w-full max-w-4xl mx-auto px-4 py-8 space-y-8">
+        
+        <div class="text-center space-y-2">
+            <h1 class="text-4xl font-extrabold tracking-tight">Citizen Leaderboard</h1>
+            <p class="text-slate-400 text-sm max-w-lg mx-auto">Standings of active community members earning points by reporting and verifying municipal issues.</p>
+        </div>
+
+        <!-- Leaderboard Table Panel -->
+        <div class="glass-panel rounded-3xl border border-white/10 p-6 space-y-4">
+            <div class="flex items-center justify-between border-b border-white/5 pb-4">
+                <h2 class="text-lg font-bold">Top Contributors</h2>
+                <span id="activeCountLabel" class="text-slate-500 text-xs">... active citizens</span>
+            </div>
+            
+            <div class="overflow-x-auto w-full">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="text-2xs uppercase tracking-wider text-slate-500 border-b border-white/5">
+                            <th class="py-3 px-4 w-12 text-center">Rank</th>
+                            <th class="py-3 px-4">Citizen</th>
+                            <th class="py-3 px-4">Reports Submitted</th>
+                            <th class="py-3 px-4 text-right">Points</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboardTableBody" class="divide-y divide-white/5 text-sm">
+                        <!-- Dynamically loaded -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Toast notifier -->
+    <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-2 opacity-0 pointer-events-none transition-all duration-300 bg-slate-900 border border-white/10 text-slate-200 px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3">
+        <div id="toastIcon" class="w-5 h-5 flex items-center justify-center font-bold"></div>
+        <div id="toastMsg" class="text-xs font-semibold"></div>
+    </div>
+
+    <script>
+        let currentUser = JSON.parse(localStorage.getItem("user") || "null");
+
+        window.onload = function() {
+            renderHeaderAuth();
+            loadLeaderboard();
+        };
+
+        function renderHeaderAuth() {
+            const container = document.getElementById("authContainer");
+            if (currentUser) {
+                container.innerHTML = `
+                    <div class="flex items-center gap-2.5 bg-slate-900/60 border border-white/10 py-1.5 px-3 rounded-full">
+                        <img src="${currentUser.avatar || 'https://www.gravatar.com/avatar?d=mp'}" class="w-7 h-7 rounded-full border border-[#00E5B0] shadow-md">
+                        <span class="font-bold text-xs text-slate-200 hidden md:inline">${currentUser.name}</span>
+                        <button onclick="handleLogout()" class="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase tracking-wider ml-1.5 transition-colors">Logout</button>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <a href="/" class="px-4 py-2 border border-white/20 text-slate-200 hover:text-white hover:border-white/30 rounded-xl text-xs font-bold transition-all">Sign In</a>
+                `;
+            }
+        }
+
+        function handleLogout() {
+            localStorage.removeItem("user");
+            currentUser = null;
+            window.location.reload();
+        }
+
+        async function loadLeaderboard() {
+            try {
+                const resp = await fetch("/api/leaderboard");
+                const list = await resp.json();
+                
+                const tbody = document.getElementById("leaderboardTableBody");
+                tbody.innerHTML = "";
+                document.getElementById("activeCountLabel").textContent = `${list.length} active citizens`;
+
+                if (list.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="4" class="py-8 text-center text-slate-500 italic">No contributors found yet. Be the first!</td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                list.forEach((user, idx) => {
+                    const isMe = currentUser && currentUser.email === user.email;
+                    const highlightClass = isMe 
+                        ? "bg-[#00E5B0]/5 border-y border-[#00E5B0]/20 font-semibold" 
+                        : "hover:bg-white/5";
+                    const glowBorder = isMe 
+                        ? "border-[#00E5B0] scale-105" 
+                        : "border-white/10";
+                    
+                    const tr = document.createElement("tr");
+                    tr.className = `${highlightClass} transition-all`;
+                    tr.innerHTML = `
+                        <td class="py-4 px-4 text-center">
+                            <span class="font-bold text-xs ${idx === 0 ? 'text-amber-400' : idx === 1 ? 'text-slate-300' : idx === 2 ? 'text-amber-600' : 'text-slate-500'}">
+                                ${idx + 1}
+                            </span>
+                        </td>
+                        <td class="py-4 px-4 flex items-center gap-3">
+                            <img src="${user.avatar_url || 'https://api.dicebear.com/7.x/bottts/svg?seed=' + user.username}" class="w-8 h-8 rounded-full border ${glowBorder} shadow-sm">
+                            <div class="flex flex-col">
+                                <span class="text-slate-200 text-sm font-semibold">${user.username} ${isMe ? '<span class="text-[10px] text-accent font-bold ml-1.5">(You)</span>' : ''}</span>
+                                <span class="text-3xs text-slate-500 font-mono">${user.email}</span>
+                            </div>
+                        </td>
+                        <td class="py-4 px-4 text-xs font-medium text-slate-300">
+                            ${user.reports_submitted || 0} reports
+                        </td>
+                        <td class="py-4 px-4 text-right">
+                            <span class="text-[#00E5B0] font-black text-sm">${user.civic_points} pts</span>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch(e) {
+                showToast("❌ Failed to fetch leaderboard data.", "error");
+            }
+        }
+
+        function showToast(msg, type) {
+            const toast = document.getElementById("toast");
+            const icon = document.getElementById("toastIcon");
+            const msgBox = document.getElementById("toastMsg");
+
+            msgBox.textContent = msg;
+            if (type === 'success') {
+                icon.textContent = "✓";
+                icon.className = "w-5 h-5 flex items-center justify-center font-bold text-emerald-400 bg-emerald-500/10 rounded-full";
+            } else if (type === 'error') {
+                icon.textContent = "✕";
+                icon.className = "w-5 h-5 flex items-center justify-center font-bold text-red-400 bg-red-500/10 rounded-full";
+            } else {
+                icon.textContent = "ℹ";
+                icon.className = "w-5 h-5 flex items-center justify-center font-bold text-blue-400 bg-blue-500/10 rounded-full";
+            }
+
+            toast.classList.remove("opacity-0", "translate-y-2", "pointer-events-none");
+            setTimeout(() => {
+                toast.classList.add("opacity-0", "translate-y-2", "pointer-events-none");
+            }, 4000);
+        }
+    </script>
+</body>
+</html>

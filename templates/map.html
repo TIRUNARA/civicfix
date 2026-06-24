@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CivicFix - Map Explorer</title>
+    <!-- Tailwind & Google Fonts -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Leaflet.js -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #020617; 
+            color: #f8fafc; 
+        }
+        h1, h2, h3, h4, h5, h6 { 
+            font-family: 'Outfit', sans-serif; 
+        }
+        .glass-panel { 
+            background: rgba(15, 23, 42, 0.75); 
+            backdrop-filter: blur(16px); 
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08); 
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(8px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .text-accent {
+            color: #00E5B0;
+        }
+        .bg-accent {
+            background-color: #00E5B0;
+        }
+        #map {
+            background-color: #020617;
+        }
+        /* Custom styles to override Leaflet dark popups */
+        .leaflet-popup-content-wrapper {
+            background: rgba(15, 23, 42, 0.95) !important;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #f8fafc !important;
+            border-radius: 16px !important;
+            padding: 4px;
+        }
+        .leaflet-popup-tip {
+            background: rgba(15, 23, 42, 0.95) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        /* Leaflet custom text-only hover tooltip */
+        .custom-tooltip {
+            background: #0f172a !important;
+            color: #f8fafc !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            border-radius: 8px !important;
+            padding: 6px 10px !important;
+            font-size: 11px !important;
+            font-weight: 600 !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+        }
+        .leaflet-tooltip-top:before {
+            border-top-color: #0f172a !important;
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen overflow-hidden">
+
+    <!-- Global Header -->
+    <header class="glass-panel z-10 flex items-center justify-between px-6 py-4 border-b border-white/10 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#00E5B0] to-cyan-500 flex items-center justify-center font-black text-lg text-slate-950 shadow-lg">CF</div>
+            <span class="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">CivicFix</span>
+        </div>
+        <nav class="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-300">
+            <a href="/" class="hover:text-white transition-colors">Dashboard</a>
+            <a href="/map" class="text-accent hover:text-white transition-colors">Map Explorer</a>
+            <a href="/leaderboard" class="hover:text-white transition-colors">Leaderboard</a>
+        </nav>
+        <div class="flex items-center gap-4">
+            <a href="/report" class="bg-accent hover:bg-[#00c294] text-slate-950 font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg text-sm flex items-center gap-1.5 hover:scale-[1.02] active:scale-[0.98]">
+                📸 Report Hazard
+            </a>
+            
+            <select id="roleToggle" class="bg-slate-900/80 border border-white/10 text-white rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-[#00E5B0] font-semibold cursor-pointer" onchange="toggleRole()">
+                <option value="citizen">Citizen Mode</option>
+                <option value="officer">Officer Portal</option>
+            </select>
+
+            <div id="authContainer" class="flex items-center gap-2"></div>
+        </div>
+    </header>
+
+    <!-- Main Workspace Split Pane -->
+    <div class="flex-1 flex overflow-hidden relative">
+        
+        <!-- Left Sidebar Filter & Search Control Panel -->
+        <aside class="w-full md:w-[360px] glass-panel border-r border-white/10 flex flex-col z-10 shrink-0 h-full overflow-y-auto p-6 space-y-6">
+            
+            <!-- Address autocomplete search -->
+            <div class="space-y-2 relative">
+                <label class="text-xs font-bold text-slate-400 uppercase tracking-wider block">Find Hazards in Area</label>
+                <div class="relative">
+                    <input id="addressSearch" type="text" oninput="handleSearchInput()" placeholder="Search address (e.g. Indiranagar)" class="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-slate-200 text-sm focus:outline-none focus:ring-1 focus:ring-[#00E5B0]">
+                    <span class="absolute right-3.5 top-3.5 text-slate-500 text-sm">🔍</span>
+                </div>
+                <ul id="searchResults" class="absolute left-0 right-0 top-[76px] bg-slate-900/95 backdrop-blur-md border border-white/15 rounded-xl shadow-2xl overflow-hidden hidden z-50 max-h-56 overflow-y-auto">
+                    <!-- autocomplete rows -->
+                </ul>
+            </div>
+
+            <!-- Global filters checklist -->
+            <div class="space-y-4 pt-4 border-t border-white/5">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Map Layer Filters</h3>
+                
+                <!-- Target Group Toggle -->
+                <label class="flex items-center gap-3 cursor-pointer group">
+                    <input type="checkbox" id="filterMyUploads" onchange="applyFilters()" class="w-4 h-4 rounded border-white/20 bg-slate-950 accent-[#00E5B0] cursor-pointer">
+                    <span class="text-sm font-semibold text-slate-300 group-hover:text-white transition-colors">Show My Uploads Only</span>
+                </label>
+
+                <!-- Status Filter Checklist -->
+                <div class="space-y-2">
+                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">Status</span>
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-300">
+                            <input type="checkbox" class="status-filter" value="Pending" checked onchange="applyFilters()"> Pending
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-300">
+                            <input type="checkbox" class="status-filter" value="Underway" checked onchange="applyFilters()"> Underway
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-300">
+                            <input type="checkbox" class="status-filter" value="Work in Progress" checked onchange="applyFilters()"> In Progress
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-300">
+                            <input type="checkbox" class="status-filter" value="Resolved" checked onchange="applyFilters()"> Resolved
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Department Filter Checklist -->
+                <div class="space-y-2">
+                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">Department</span>
+                    <div class="space-y-2">
+                        <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
+                            <input type="checkbox" class="dept-filter" value="Roads" checked onchange="applyFilters()"> Roads & Potholes
+                        </label>
+                        <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
+                            <input type="checkbox" class="dept-filter" value="Sanitation" checked onchange="applyFilters()"> Sanitation & Garbage
+                        </label>
+                        <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
+                            <input type="checkbox" class="dept-filter" value="Utilities" checked onchange="applyFilters()"> Electrical & Water
+                        </label>
+                        <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
+                            <input type="checkbox" class="dept-filter" value="Parks" checked onchange="applyFilters()"> Public Parks & Spaces
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Priority range slider -->
+                <div class="space-y-2">
+                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block flex justify-between">
+                        <span>Min Priority</span>
+                        <span id="priorityVal" class="text-accent font-bold">Lvl 1</span>
+                    </span>
+                    <input type="range" id="filterPriority" min="1" max="5" value="1" oninput="updatePrioritySlider()" class="w-full h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-[#00E5B0]">
+                </div>
+            </div>
+
+            <!-- View Counts stats card -->
+            <div class="glass-card rounded-2xl p-4 mt-auto border border-white/5 space-y-1">
+                <span class="text-3xl font-extrabold text-[#00E5B0]" id="matchCount">0</span>
+                <span class="text-slate-400 font-semibold text-2xs uppercase tracking-wider block">Active Hazards in View</span>
+            </div>
+
+        </aside>
+
+        <!-- Right Leaflet Map pane (Base Layer z-0) -->
+        <main class="flex-grow h-full relative z-0">
+            <div id="map" class="w-full h-full"></div>
+            
+            <!-- Live Monospace coordinates widget -->
+            <div class="absolute bottom-6 right-6 z-10 glass-panel border border-white/10 px-4 py-2 rounded-xl text-3xs font-mono tracking-wider shadow-2xl flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-[#00E5B0] animate-pulse"></span>
+                <span id="coordDisplay">Lat: --, Lng: --</span>
+            </div>
+        </main>
+
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="detailModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="glass-panel w-full max-w-2xl rounded-3xl border border-white/10 overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-white/10">
+                <h3 class="text-lg font-bold" id="modalTitle">Report Details</h3>
+                <button onclick="closeDetailModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5">&times;</button>
+            </div>
+            <div class="p-6 overflow-y-auto space-y-6 flex-1">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">Original Hazard Image</span>
+                        <img id="modalBeforeImage" class="w-full h-48 object-cover rounded-2xl border border-white/10 bg-slate-900" src="" alt="Before">
+                    </div>
+                    <div id="modalAfterContainer" class="hidden">
+                        <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block mb-2 text-[#00E5B0]">AI Verified Resolution</span>
+                        <img id="modalAfterImage" class="w-full h-48 object-cover rounded-2xl border border-white/10 bg-slate-900" src="" alt="After">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 text-xs">
+                    <div>
+                        <span class="text-slate-500 font-semibold block uppercase">Department</span>
+                        <span class="text-slate-200 font-bold text-sm" id="modalDept">...</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 font-semibold block uppercase">Status</span>
+                        <span id="modalStatus" class="inline-block mt-0.5 px-2.5 py-0.5 rounded text-[11px] font-bold">...</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 font-semibold block uppercase">Priority Level</span>
+                        <span class="text-slate-200 font-bold" id="modalPriority">...</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 font-semibold block uppercase">Date Filed</span>
+                        <span class="text-slate-200" id="modalDate">...</span>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">AI Diagnostic Report</span>
+                    <p class="text-slate-300 text-sm leading-relaxed p-4 bg-slate-900/60 rounded-2xl border border-white/5" id="modalDesc">...</p>
+                </div>
+
+                <div class="space-y-2">
+                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">Diagnostics Tags</span>
+                    <div class="flex flex-wrap gap-1.5" id="modalTags"></div>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-white/10 flex justify-end gap-3" id="modalFooterActions">
+                <button onclick="closeDetailModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast panel -->
+    <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-2 opacity-0 pointer-events-none transition-all duration-300 bg-slate-900 border border-white/10 text-slate-200 px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3">
+        <div id="toastIcon" class="w-5 h-5 flex items-center justify-center font-bold"></div>
+        <div id="toastMsg" class="text-xs font-semibold"></div>
+    </div>
+
+    <script>
+        let currentUser = JSON.parse(localStorage.getItem("user") || "null");
+        let map;
+        let markerGroup;
+        let allReports = [];
+        let searchTimeout = null;
+
+        const statusColors = {
+            'Pending': '#f59e0b',
+            'Underway': '#3b82f6',
+            'Work in Progress': '#3b82f6',
+            'Resolved': '#10b981'
+        };
+
+        window.onload = function() {
+            renderHeaderAuth();
+            initMap();
+            loadReportsData();
+        };
+
+        function renderHeaderAuth() {
+            const container = document.getElementById("authContainer");
+            if (currentUser) {
+                container.innerHTML = `
+                    <div class="flex items-center gap-2.5 bg-slate-900/60 border border-white/10 py-1.5 px-3 rounded-full">
+                        <img src="${currentUser.avatar || 'https://www.gravatar.com/avatar?d=mp'}" class="w-7 h-7 rounded-full border border-[#00E5B0] shadow-md">
+                        <span class="font-bold text-xs text-slate-200 hidden md:inline">${currentUser.name}</span>
+                        <button onclick="handleLogout()" class="text-[10px] text-red-400 hover:text-red-300 font-bold uppercase tracking-wider ml-1.5 transition-colors">Logout</button>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <a href="/" class="px-4 py-2 border border-white/20 text-slate-200 hover:text-white hover:border-white/30 rounded-xl text-xs font-bold transition-all">Sign In</a>
+                `;
+            }
+        }
+
+        function handleLogout() {
+            localStorage.removeItem("user");
+            currentUser = null;
+            window.location.reload();
+        }
+
+        function initMap() {
+            map = L.map('map', {
+                zoomControl: false,
+                minZoom: 10,
+                maxZoom: 18
+            }).setView([12.9716, 77.5946], 13);
+
+            // Dark tiles layer
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '© OpenStreetMap contributors, © CartoDB',
+                minZoom: 10
+            }).addTo(map);
+
+            // Add standard scale bar
+            L.control.scale({ position: 'bottomleft' }).addTo(map);
+
+            // Coordinates dynamic widget
+            map.on('move', function() {
+                const center = map.getCenter();
+                document.getElementById("coordDisplay").textContent = `Lat: ${center.lat.toFixed(5)}, Lng: ${center.lng.toFixed(5)}`;
+            });
+
+            markerGroup = L.layerGroup().addTo(map);
+
+            // Automatically focus current position
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    map.setView([pos.coords.latitude, pos.coords.longitude], 13);
+                });
+            }
+        }
+
+        async function loadReportsData() {
+            try {
+                const resp = await fetch("/api/reports/list");
+                allReports = await resp.json();
+                applyFilters();
+            } catch(e) {
+                showToast("❌ Failed to fetch map hazards list.", "error");
+            }
+        }
+
+        function applyFilters() {
+            if (!markerGroup) return;
+            markerGroup.clearLayers();
+
+            const myUploadsOnly = document.getElementById("filterMyUploads").checked;
+            const minPriority = parseInt(document.getElementById("filterPriority").value);
+
+            // Fetch checked status filters
+            const checkedStatuses = Array.from(document.querySelectorAll(".status-filter:checked")).map(x => x.value);
+            // Fetch checked dept filters
+            const checkedDepts = Array.from(document.querySelectorAll(".dept-filter:checked")).map(x => x.value);
+
+            let matches = allReports.filter(r => {
+                // Uploads filter
+                if (myUploadsOnly && (!currentUser || r.reporter_email !== currentUser.email)) return false;
+                // Status filter
+                if (!checkedStatuses.includes(r.status)) return false;
+                // Dept filter
+                if (!checkedDepts.includes(r.department)) return false;
+                // Priority filter
+                if (r.priority < minPriority) return false;
+
+                return true;
+            });
+
+            document.getElementById("matchCount").textContent = matches.length;
+
+            matches.forEach(r => {
+                const color = statusColors[r.status] || '#f59e0b';
+                const marker = L.circleMarker([r.latitude, r.longitude], {
+                    radius: 8,
+                    fillColor: color,
+                    color: '#020617',
+                    weight: 1.5,
+                    opacity: 1,
+                    fillOpacity: 0.85
+                });
+
+                // Custom tooltip on hover
+                marker.bindTooltip(`<b>${r.id}</b><br><span class="text-slate-400">${r.department}</span>`, {
+                    direction: 'top',
+                    offset: L.point(0, -6),
+                    className: 'custom-tooltip'
+                });
+
+                // Detailed popup on click
+                marker.bindPopup(`
+                    <div style="font-family: 'Inter', sans-serif;" class="p-2 space-y-2 w-52 text-slate-100">
+                        <div class="flex justify-between items-center border-b border-white/10 pb-1">
+                            <span class="font-mono font-bold text-slate-300 text-xs">${r.id}</span>
+                            <span class="text-3xs font-extrabold uppercase px-1.5 py-0.5 rounded" style="background-color: ${color}20; color: ${color}">${r.status}</span>
+                        </div>
+                        <img src="${r.image_path}" class="w-full h-24 object-cover rounded-lg border border-white/10 shadow-md">
+                        <p class="text-2xs text-slate-300 line-clamp-2">${r.description || 'No description'}</p>
+                        <button onclick="window.openDetailModal('${r.id}')" class="w-full text-center bg-accent hover:bg-[#00c294] text-slate-950 font-bold py-1.5 rounded-lg text-2xs transition-all shadow">Inspect Hazard</button>
+                    </div>
+                `);
+
+                markerGroup.addLayer(marker);
+            });
+        }
+
+        // OSM Autocomplete Lookups
+        function handleSearchInput() {
+            clearTimeout(searchTimeout);
+            const query = document.getElementById("addressSearch").value.trim();
+            if (query.length < 3) {
+                document.getElementById("searchResults").classList.add("hidden");
+                return;
+            }
+            searchTimeout = setTimeout(async () => {
+                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`;
+                try {
+                    const resp = await fetch(url, {
+                        headers: { 'User-Agent': 'CivicFix' }
+                    });
+                    const data = await resp.json();
+                    showSearchResults(data);
+                } catch(e) {
+                    console.error("OSM Geocoder failed", e);
+                }
+            }, 400);
+        }
+
+        function showSearchResults(results) {
+            const list = document.getElementById("searchResults");
+            list.innerHTML = "";
+            if (results.length === 0) {
+                list.classList.add("hidden");
+                return;
+            }
+            results.forEach(item => {
+                const li = document.createElement("li");
+                li.className = "px-3 py-2.5 hover:bg-white/5 cursor-pointer border-b border-white/5 last:border-b-0 text-2xs leading-snug";
+                li.textContent = item.display_name;
+                li.onclick = () => {
+                    const lat = parseFloat(item.lat);
+                    const lon = parseFloat(item.lon);
+                    map.setView([lat, lon], 15);
+                    list.classList.add("hidden");
+                    document.getElementById("addressSearch").value = item.display_name;
+                };
+                list.appendChild(li);
+            });
+            list.classList.remove("hidden");
+        }
+
+        function updatePrioritySlider() {
+            const val = document.getElementById("filterPriority").value;
+            document.getElementById("priorityVal").textContent = `Lvl ${val}`;
+            applyFilters();
+        }
+
+        // Dynamic details lookup exported to window scope
+        window.openDetailModal = function(reportId) {
+            const r = allReports.find(x => x.id === reportId);
+            if (!r) return;
+
+            document.getElementById("modalTitle").textContent = `Report Details - ${r.id}`;
+            document.getElementById("modalBeforeImage").src = r.image_path;
+            
+            if (r.status === 'Resolved' && r.resolved_image_path) {
+                document.getElementById("modalAfterContainer").classList.remove("hidden");
+                document.getElementById("modalAfterImage").src = r.resolved_image_path;
+            } else {
+                document.getElementById("modalAfterContainer").classList.add("hidden");
+            }
+
+            document.getElementById("modalDept").textContent = r.department;
+            document.getElementById("modalPriority").textContent = `Lvl ${r.priority}`;
+            document.getElementById("modalDate").textContent = new Date(r.created_at).toLocaleString();
+            document.getElementById("modalDesc").textContent = r.description || "No description provided.";
+            
+            // Render Status badge
+            const statusLabel = document.getElementById("modalStatus");
+            statusLabel.textContent = r.status;
+            const color = statusColors[r.status] || '#f59e0b';
+            statusLabel.className = `inline-block mt-0.5 px-2.5 py-0.5 rounded text-[11px] font-bold`;
+            statusLabel.style.backgroundColor = `${color}20`;
+            statusLabel.style.color = color;
+            statusLabel.style.border = `1px solid ${color}30`;
+
+            // Tags
+            const tagsBox = document.getElementById("modalTags");
+            tagsBox.innerHTML = "";
+            let tagsList = [];
+            try {
+                tagsList = JSON.parse(r.tags);
+            } catch(e) {
+                tagsList = Array.isArray(r.tags) ? r.tags : [r.tags];
+            }
+            tagsList.forEach(t => {
+                const badge = document.createElement("span");
+                badge.className = "bg-slate-800 text-slate-300 px-2 py-1 rounded text-2xs border border-white/5 font-semibold";
+                badge.textContent = `#${t}`;
+                tagsBox.appendChild(badge);
+            });
+
+            // Action footer
+            const footerActions = document.getElementById("modalFooterActions");
+            const role = document.getElementById("roleToggle").value;
+            footerActions.innerHTML = `<button onclick="closeDetailModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all">Close</button>`;
+            
+            if (role === 'officer' && r.status !== 'Resolved') {
+                const resolveBtn = document.createElement("button");
+                resolveBtn.className = "bg-accent hover:bg-[#00c294] text-slate-950 px-4 py-2 font-bold rounded-xl text-xs transition-all shadow-md";
+                resolveBtn.textContent = "👮 Verify Resolve";
+                resolveBtn.onclick = () => triggerResolveUpload(r.id);
+                footerActions.appendChild(resolveBtn);
+            }
+
+            document.getElementById("detailModal").classList.remove("hidden");
+        };
+
+        function closeDetailModal() {
+            document.getElementById("detailModal").classList.add("hidden");
+        }
+
+        async function triggerResolveUpload(reportId) {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = "image/*";
+            input.onchange = async () => {
+                closeDetailModal();
+                showToast("⚙️ AI is running visual verification on resolution...", "info");
+                const formData = new FormData();
+                formData.append("resolved_image", input.files[0]);
+                try {
+                    const resp = await fetch(`/api/reports/resolve/${reportId}`, {
+                        method: "POST",
+                        body: formData
+                    });
+                    const data = await resp.json();
+                    if (data.verified) {
+                        showToast("✅ AI Verified Success: " + data.explanation, "success");
+                    } else {
+                        showToast("❌ Verification Failed: " + data.explanation, "error");
+                    }
+                    loadReportsData();
+                } catch(e) {
+                    showToast("❌ Network error verifying resolution.", "error");
+                }
+            };
+            input.click();
+        }
+
+        function showToast(msg, type) {
+            const toast = document.getElementById("toast");
+            const icon = document.getElementById("toastIcon");
+            const msgBox = document.getElementById("toastMsg");
+
+            msgBox.textContent = msg;
+            if (type === 'success') {
+                icon.textContent = "✓";
+                icon.className = "w-5 h-5 flex items-center justify-center font-bold text-emerald-400 bg-emerald-500/10 rounded-full";
+            } else if (type === 'error') {
+                icon.textContent = "✕";
+                icon.className = "w-5 h-5 flex items-center justify-center font-bold text-red-400 bg-red-500/10 rounded-full";
+            } else {
+                icon.textContent = "ℹ";
+                icon.className = "w-5 h-5 flex items-center justify-center font-bold text-blue-400 bg-blue-500/10 rounded-full";
+            }
+
+            toast.classList.remove("opacity-0", "translate-y-2", "pointer-events-none");
+            setTimeout(() => {
+                toast.classList.add("opacity-0", "translate-y-2", "pointer-events-none");
+            }, 4000);
+        }
+
+        function toggleRole() {
+            const role = document.getElementById("roleToggle").value;
+            showToast(`🔄 Role switched to: ${role === 'officer' ? 'Municipal Officer' : 'Citizen'}`, "info");
+        }
+    </script>
+</body>
+</html>
