@@ -27,6 +27,11 @@ def test_initialization():
     lead_cols = [row[1] for row in cursor.fetchall()]
     assert "email" in lead_cols
     assert "avatar_url" in lead_cols
+
+    # Check qr_sessions columns
+    cursor.execute("PRAGMA table_info(qr_sessions)")
+    qr_cols = [row[1] for row in cursor.fetchall()]
+    assert "draft_data" in qr_cols
     print("Test passed: Database initialized correctly and columns verified.")
 
 if __name__ == "__main__":

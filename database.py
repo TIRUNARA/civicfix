@@ -112,6 +112,15 @@ def init_db():
     )
     """)
     
+    # Safely migrate qr_sessions by adding draft_data column
+    if conn.is_pg:
+        cursor.execute("ALTER TABLE qr_sessions ADD COLUMN IF NOT EXISTS draft_data TEXT")
+    else:
+        try:
+            cursor.execute("ALTER TABLE qr_sessions ADD COLUMN draft_data TEXT")
+        except Exception:
+            pass
+    
     # We drop the old leaderboard table if it doesn't have the new layout
     try:
         # Check if new columns exist
