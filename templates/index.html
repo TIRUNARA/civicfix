@@ -3,168 +3,345 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CivicFix</title>
+    <title>CivicFix - Premium Infrastructure Platform</title>
+    <!-- Google Fonts & Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Leaflet.js -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- QR Generator -->
     <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+    <!-- Google Identity Services -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    
     <style>
-        body { background-color: #08080C; color: #E2E8F0; font-family: 'Outfit', sans-serif; }
-        .glass-panel { background: rgba(16, 16, 24, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.05); }
-        #map { height: 100vh; width: 100%; z-index: 1; }
+        body { 
+            background-color: #030305; 
+            color: #E2E8F0; 
+            font-family: 'Outfit', sans-serif; 
+        }
+        .glass-panel { 
+            background: rgba(13, 13, 23, 0.75); 
+            backdrop-filter: blur(20px); 
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08); 
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(8px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .glass-card:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(0, 255, 194, 0.25);
+            box-shadow: 0 0 15px rgba(0, 255, 194, 0.05);
+            transform: translateY(-2px);
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        /* Map custom styling */
+        #map { 
+            height: 100vh; 
+            width: 100%; 
+            z-index: 1; 
+            background-color: #030305;
+        }
+        /* Leaflet custom tooltip */
+        .leaflet-tooltip {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+        .leaflet-tooltip-top:before {
+            border-top-color: transparent !important;
+        }
     </style>
 </head>
-<body class="flex flex-col md:flex-row min-h-screen overflow-hidden">
-    <!-- Sidebar Control Panel -->
-    <div class="w-full md:w-[35%] glass-panel p-6 z-10 flex flex-col justify-between overflow-y-auto md:max-h-screen">
-        <div>
-            <div class="flex items-center justify-between mb-8">
-                <h1 class="text-3xl font-bold tracking-wider text-white">Civic<span class="text-[#00FFC2]">Fix</span></h1>
-                <select id="roleToggle" class="bg-gray-800 border border-gray-700 text-white rounded p-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#00FFC2]" onchange="toggleRole()">
-                    <option value="citizen">Citizen Mode</option>
-                    <option value="officer">Officer Portal</option>
-                </select>
-            </div>
+<body class="flex flex-col h-screen overflow-hidden">
 
-            <!-- Citizen Controls -->
-            <div id="citizenPanel">
-                <button onclick="triggerReportFlow()" class="w-full bg-[#00FFC2] text-black font-bold p-4 rounded hover:bg-[#00E5AE] transition-all flex items-center justify-center gap-2 mb-6">
-                    📸 Report New Hazard
+    <!-- Header Navbar -->
+    <header class="glass-panel mx-4 my-3 px-6 py-3 rounded-2xl flex items-center justify-between z-20 shadow-2xl relative">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#00FFC2] to-cyan-500 flex items-center justify-center font-black text-lg text-black shadow-lg">CF</div>
+            <span class="font-extrabold text-2xl tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">CivicFix</span>
+        </div>
+
+        <div class="flex items-center space-x-4">
+            <!-- Mode Toggle -->
+            <select id="roleToggle" class="bg-slate-900/80 border border-white/10 text-white rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-[#00FFC2] font-semibold cursor-pointer" onchange="toggleRole()">
+                <option value="citizen">Citizen Mode</option>
+                <option value="officer">Officer Portal</option>
+            </select>
+
+            <!-- Authentication Widget -->
+            <div id="auth-panel" class="flex items-center space-x-2">
+                <button onclick="triggerMockLogin()" class="px-3.5 py-2 bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 text-emerald-400 hover:from-emerald-500/20 hover:to-cyan-500/20 font-bold rounded-xl text-xs transition-all shadow-md">
+                    🔑 Mock Login (Demo)
                 </button>
-                
-                <!-- Hyperlocal Navigation Panel -->
-                <div class="mb-6 border-b border-gray-850 pb-5">
-                    <div class="flex items-center justify-between mb-2">
-                        <h3 class="text-lg font-semibold text-gray-400">Navigate Area</h3>
-                        <button onclick="toggleNavOptions()" id="navToggleBtn" class="text-xs text-[#00FFC2] hover:text-white transition-all focus:outline-none flex items-center gap-1">
-                            More Options <span id="navToggleArrow">▼</span>
-                        </button>
-                    </div>
+                <div id="g-login-btn"></div>
+            </div>
+            <div id="user-profile" class="hidden flex items-center space-x-2.5 bg-slate-900/60 border border-white/10 py-1.5 px-3 rounded-full">
+                <img id="user-avatar" src="" class="w-7 h-7 rounded-full border border-[#00FFC2] shadow-md">
+                <span id="user-name" class="font-bold text-xs text-slate-200">Guest</span>
+                <button onclick="handleLogout()" class="text-3xs text-red-400 hover:text-red-300 font-bold uppercase tracking-wider ml-1.5 transition-colors">Logout</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="flex-1 relative flex overflow-hidden">
+        
+        <!-- Sidebar Panel -->
+        <div id="sidebar-container" class="absolute top-2 left-4 w-full max-w-[380px] bottom-4 glass-panel rounded-2xl p-5 z-10 shadow-2xl flex flex-col justify-between overflow-hidden">
+            <div class="flex flex-col h-full overflow-hidden">
+                <!-- Navigation Tabs -->
+                <div class="flex border-b border-white/5 pb-2 mb-4 space-x-1.5 overflow-x-auto">
+                    <button onclick="switchTab('report')" id="tab-report" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-[#00FFC2]/15 text-[#00FFC2] border border-[#00FFC2]/20">📸 Report</button>
+                    <button onclick="switchTab('my-reports')" id="tab-my-reports" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:bg-white/5">📋 My List</button>
+                    <button onclick="switchTab('leaderboard')" id="tab-leaderboard" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:bg-white/5">🏆 Leaders</button>
+                    <button onclick="switchTab('officer')" id="tab-officer" class="tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:bg-white/5">👮 Officer</button>
+                </div>
+
+                <!-- Tab Contents Container -->
+                <div class="flex-1 overflow-y-auto pr-1">
                     
-                    <div class="flex flex-col gap-2">
-                        <select id="citySelect" onchange="jumpToCity()" class="w-full bg-gray-900 border border-gray-700 rounded p-2.5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-[#00FFC2]">
-                            <option value="">-- Jump to City --</option>
-                            <option value="12.9716,77.5946">Bengaluru</option>
-                            <option value="19.0760,72.8777">Mumbai</option>
-                            <option value="28.6139,77.2090">Delhi</option>
-                            <option value="13.0827,80.2707">Chennai</option>
-                            <option value="22.5726,88.3639">Kolkata</option>
-                        </select>
-                        
-                        <!-- Collapsible Advanced Options -->
-                        <div id="advancedNavOptions" class="hidden flex flex-col gap-2 mt-1">
-                            <button onclick="useCurrentLocation()" class="w-full bg-gray-850 hover:bg-gray-800 text-[#00FFC2] font-semibold py-2 px-4 rounded border border-gray-700 transition-all flex items-center justify-center gap-2 text-xs">
-                                📍 Center on My Location
+                    <!-- 1. Report Tab Content -->
+                    <div id="content-report" class="tab-content space-y-4">
+                        <div class="glass-card rounded-xl p-4 text-center">
+                            <p class="text-xs text-slate-400 mb-3">Found a public hazard or broken infrastructure? Report it instantly and earn community points.</p>
+                            <button onclick="triggerReportFlow()" class="w-full bg-gradient-to-r from-[#00FFC2] to-emerald-400 text-black font-bold p-3.5 rounded-xl hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/10">
+                                📸 Report New Hazard
                             </button>
-                            <input id="customCoords" type="text" oninput="onCoordsInput()" placeholder="Paste coordinates (e.g. 12.97, 77.59)" class="w-full bg-gray-900 border border-gray-700 rounded p-2.5 text-white text-xs focus:outline-none focus:ring-1 focus:ring-[#00FFC2]" />
-                            <span class="text-3xs text-gray-500 italic text-left">Pasting coordinates centers the map instantly.</span>
+                        </div>
+
+                        <!-- Hyperlocal Navigation -->
+                        <div class="glass-card rounded-xl p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Navigate Area</h3>
+                                <button onclick="toggleNavOptions()" id="navToggleBtn" class="text-2xs text-[#00FFC2] hover:underline flex items-center gap-1 font-semibold">
+                                    Options <span id="navToggleArrow">▼</span>
+                                </button>
+                            </div>
+                            
+                            <div class="space-y-2">
+                                <select id="citySelect" onchange="jumpToCity()" class="w-full bg-slate-900 border border-white/10 rounded-lg p-2.5 text-slate-200 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[#00FFC2] cursor-pointer">
+                                    <option value="">-- Select City --</option>
+                                    <option value="12.9716,77.5946">Bengaluru</option>
+                                    <option value="19.0760,72.8777">Mumbai</option>
+                                    <option value="28.6139,77.2090">Delhi</option>
+                                    <option value="13.0827,80.2707">Chennai</option>
+                                    <option value="22.5726,88.3639">Kolkata</option>
+                                </select>
+                                
+                                <div id="advancedNavOptions" class="hidden space-y-2 pt-1 border-t border-white/5">
+                                    <button onclick="useCurrentLocation()" class="w-full bg-slate-900 hover:bg-slate-800 text-[#00FFC2] font-bold py-2 rounded-lg border border-white/5 transition-all text-3xs uppercase tracking-wider flex items-center justify-center gap-1.5">
+                                        📍 Locate Me
+                                    </button>
+                                    <input id="customCoords" type="text" oninput="onCoordsInput()" placeholder="Paste coordinates (lat, lng)" class="w-full bg-slate-900 border border-white/10 rounded-lg p-2 text-slate-200 text-3xs focus:outline-none focus:ring-1 focus:ring-[#00FFC2]" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Manual Tracking -->
+                        <div class="glass-card rounded-xl p-4">
+                            <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Track Report ID</h3>
+                            <div class="flex gap-2">
+                                <input id="trackingId" type="text" placeholder="CF-XXXX" class="w-full bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-slate-200 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[#00FFC2]" />
+                                <button onclick="trackReport()" class="bg-slate-800 hover:bg-slate-700 px-3.5 rounded-lg text-[#00FFC2] text-xs font-bold transition-colors">Track</button>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div class="mb-6">
-                    <h3 class="text-lg font-semibold text-gray-400 mb-2">Track Your Report</h3>
-                    <div class="flex gap-2">
-                        <input id="trackingId" type="text" placeholder="Enter ID (e.g., CF-A23F)" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-white focus:outline-none focus:ring-1 focus:ring-[#00FFC2]" />
-                        <button onclick="trackReport()" class="bg-gray-800 hover:bg-gray-700 px-4 rounded text-[#00FFC2]">Track</button>
+                    <!-- 2. My List Tab Content -->
+                    <div id="content-my-reports" class="tab-content hidden space-y-3">
+                        <div id="my-reports-list" class="space-y-2">
+                            <p class="text-slate-500 text-xs italic text-center">Log in to view your reports.</p>
+                        </div>
                     </div>
-                </div>
-            </div>
 
-            <!-- Officer Controls -->
-            <div id="officerPanel" class="hidden">
-                <h3 class="text-lg font-semibold text-[#00FFC2] mb-4">Assigned Tasks</h3>
-                <div id="taskList" class="space-y-3">
-                    <p class="text-gray-500 text-sm">No unresolved issues.</p>
+                    <!-- 3. Leaders Tab Content -->
+                    <div id="content-leaderboard" class="tab-content hidden space-y-3">
+                        <div class="flex items-center justify-between px-1 text-3xs font-semibold text-slate-500 uppercase tracking-wider border-b border-white/5 pb-2">
+                            <span>User</span>
+                            <span>Points</span>
+                        </div>
+                        <div id="leaderboard-list" class="space-y-2.5">
+                            <p class="text-slate-500 text-xs italic text-center">Loading leaderboard...</p>
+                        </div>
+                    </div>
+
+                    <!-- 4. Officer Tab Content -->
+                    <div id="content-officer" class="tab-content hidden space-y-3">
+                        <div id="taskList" class="space-y-2.5">
+                            <p class="text-slate-500 text-xs italic text-center">No reports active.</p>
+                        </div>
+                    </div>
+
                 </div>
             </div>
             
-            <!-- Gamification Leaderboard -->
-            <div class="mt-8">
-                <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Community Leaderboard</h3>
-                <div id="leaderboard" class="space-y-2 text-sm text-gray-300">
-                    <div class="flex justify-between border-b border-gray-800 pb-1">
-                        <span>Loading...</span>
-                    </div>
-                </div>
+            <div class="text-[10px] text-slate-600 mt-4 text-center border-t border-white/5 pt-3">
+                CivicFix Platform &copy; 2026
             </div>
         </div>
 
-        <div class="text-xs text-gray-600 mt-6 text-center">
-            CivicFix Platform © 2026
-        </div>
-    </div>
+        <!-- Leaflet Map -->
+        <div id="map" class="absolute inset-0"></div>
 
-    <!-- Map Viewport -->
-    <div class="flex-grow relative">
-        <div id="map"></div>
-        <!-- Floating Geolocation Button (Google Maps Style) -->
-        <button onclick="useCurrentLocation()" class="absolute bottom-6 right-6 z-[1000] w-12 h-12 rounded-full glass-panel text-[#00FFC2] hover:text-white hover:scale-105 active:scale-95 transition-all flex items-center justify-center shadow-lg border border-gray-700/50 bg-[#101018]/90" title="Center on My Location">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <!-- Geolocation Widget on Map -->
+        <button onclick="useCurrentLocation()" class="absolute bottom-6 right-6 z-[1000] w-12 h-12 rounded-full glass-panel text-[#00FFC2] hover:text-white hover:scale-105 active:scale-95 transition-all flex items-center justify-center shadow-lg border border-white/10" title="Center on My Location">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
         </button>
     </div>
 
-    <!-- Modals (Report Flow, QR Code, Camera capture HUD overlays) -->
+    <!-- Modal overlay: Upload / QR Flow -->
     <div id="modalOverlay" class="fixed inset-0 bg-black/80 z-50 flex items-center justify-center hidden">
-        <div class="glass-panel p-8 rounded-lg max-w-md w-full mx-4 text-center">
-            <h2 class="text-2xl font-bold mb-4 text-white">Report a Hazard</h2>
+        <div class="glass-panel p-6 rounded-2xl max-w-sm w-full mx-4 text-center border border-white/10 shadow-2xl">
+            <h2 class="text-xl font-bold mb-3 text-white">Report Hazard</h2>
             
-            <!-- Desktop QR Bridge View -->
-            <div id="desktopBridgeView" class="hidden">
-                <p class="text-gray-400 mb-4 text-sm">Since you are on a computer, please scan this QR code with your phone to use your live camera and GPS coordinates.</p>
-                <div id="qrcode" class="flex justify-center mb-6 bg-white p-4 rounded-lg w-fit mx-auto animate-fade-in"></div>
-                <div class="flex items-center justify-center gap-2 text-sm text-[#00FFC2] mb-6">
-                    <div class="animate-ping w-2 h-2 rounded-full bg-[#00FFC2]"></div>
+            <!-- Desktop Bridge (QR code) -->
+            <div id="desktopBridgeView" class="hidden space-y-4">
+                <p class="text-slate-400 text-xs">Scan this QR code with your phone to use its camera & coordinates.</p>
+                <div id="qrcode" class="flex justify-center p-3.5 bg-white rounded-xl w-fit mx-auto border border-slate-200"></div>
+                <div class="flex items-center justify-center gap-2 text-xs text-[#00FFC2] font-semibold py-1 bg-[#00FFC2]/5 rounded-lg border border-[#00FFC2]/10 w-fit px-3 mx-auto">
+                    <div class="animate-ping w-1.5 h-1.5 rounded-full bg-[#00FFC2]"></div>
                     <span>Waiting for mobile snapshot...</span>
                 </div>
-                <div class="border-t border-gray-800 pt-4">
-                    <p class="text-gray-500 text-xs mb-2">— OR —</p>
-                    <button onclick="showDirectUpload()" class="bg-gray-850 hover:bg-gray-800 text-white font-semibold text-xs py-2 px-4 rounded w-full border border-gray-700/50 transition-all shadow-md">Upload Image from this Device</button>
+                <div class="border-t border-white/5 pt-3">
+                    <button onclick="showDirectUpload()" class="w-full bg-slate-900 border border-white/10 hover:bg-slate-800 text-slate-300 font-bold text-2xs uppercase tracking-wider py-2.5 rounded-xl transition-all">
+                        Or Upload File Directly
+                    </button>
                 </div>
             </div>
 
-            <!-- Desktop Direct Upload View -->
-            <div id="directUploadView" class="hidden text-left space-y-4">
-                <p class="text-gray-400 text-xs">Upload an image file directly. We will geo-tag the report using your browser's location (or the map's current center if unavailable).</p>
+            <!-- Direct file upload form -->
+            <div id="directUploadView" class="hidden text-left space-y-3.5">
+                <p class="text-slate-400 text-2xs">Upload an image file directly. We will geo-tag it using your location.</p>
                 <div>
-                    <label class="block text-2xs font-semibold text-gray-500 mb-1">Select Image:</label>
-                    <input type="file" id="directFile" accept="image/*" class="w-full text-xs text-gray-400 bg-gray-900 border border-gray-800 rounded p-2 focus:outline-none focus:border-[#00FFC2] file:mr-4 file:py-1 file:px-2 file:rounded file:border-0 file:text-2xs file:font-semibold file:bg-gray-800 file:text-white hover:file:bg-gray-700 cursor-pointer" />
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Select Image File</label>
+                    <input type="file" id="directFile" accept="image/*" class="w-full text-xs text-slate-400 bg-slate-950 border border-white/10 rounded-xl p-2.5 focus:outline-none file:mr-3 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-3xs file:font-bold file:bg-[#00FFC2] file:text-black hover:file:opacity-90 cursor-pointer" />
                 </div>
-                <div>
-                    <label class="block text-2xs font-semibold text-gray-500 mb-1">Citizen Username:</label>
-                    <input type="text" id="directUsername" value="Citizen Hero" class="w-full text-xs text-white bg-gray-900 border border-gray-800 rounded p-2 focus:outline-none focus:border-[#00FFC2]" />
-                </div>
-                <button onclick="submitDirectReport()" class="w-full bg-[#00FFC2] hover:bg-[#00e0a8] text-black font-semibold text-xs py-2 rounded transition-all shadow-lg hover:shadow-[#00FFC2]/20">Submit Report</button>
-                <button onclick="backToQR()" class="w-full text-center text-2xs text-gray-500 hover:text-white mt-1 transition-all">Back to QR Code</button>
+                <button onclick="submitDirectReportImage()" class="w-full bg-[#00FFC2] hover:bg-[#00e5b0] text-black font-bold text-xs py-3 rounded-xl transition-all shadow-md shadow-emerald-500/10">
+                    Analyze with AI
+                </button>
+                <button onclick="backToQR()" class="w-full text-center text-3xs text-slate-500 hover:text-slate-400 font-bold uppercase tracking-wider transition-all">
+                    Back to QR Code
+                </button>
             </div>
 
-            <!-- Mobile Viewport view (Direct camera stream + native file fallback) -->
-            <div id="mobileCaptureView" class="hidden flex flex-col items-center space-y-4">
-                <div class="relative w-full max-h-64 rounded overflow-hidden bg-black">
+            <!-- Mobile Capture view -->
+            <div id="mobileCaptureView" class="hidden flex flex-col items-center space-y-3.5">
+                <div class="relative w-full aspect-video rounded-xl overflow-hidden bg-black border border-white/10">
                     <video id="videoView" autoplay playsinline class="w-full h-full object-cover"></video>
                     <canvas id="photoCanvas" class="hidden"></canvas>
                 </div>
                 
-                <div class="flex flex-col items-center w-full space-y-3">
-                    <!-- Shutter button for Live Camera -->
-                    <button id="shutterBtn" onclick="capturePhoto()" class="w-16 h-16 rounded-full bg-red-600 border-4 border-white hover:scale-105 transition-all shadow-lg"></button>
+                <div class="flex flex-col items-center w-full space-y-2.5">
+                    <button id="shutterBtn" onclick="capturePhoto()" class="w-14 h-14 rounded-full bg-red-600 border-4 border-white hover:scale-105 active:scale-95 transition-all shadow-lg"></button>
+                    <p class="text-3xs text-slate-500 font-bold uppercase tracking-wider">Take Live Photo</p>
                     
-                    <p class="text-xs text-gray-500">— OR —</p>
-                    
-                    <!-- Native Mobile File Input (Allows picking photo or taking live pic via native camera) -->
-                    <div class="w-full text-left">
-                        <label class="block text-2xs font-semibold text-gray-500 mb-1 text-center">Use Native Camera / Photo Library:</label>
-                        <input type="file" id="mobileFile" accept="image/*" capture="environment" onchange="submitMobileFile(this)" class="w-full text-xs text-gray-400 bg-gray-900 border border-gray-800 rounded p-2 focus:outline-none focus:border-[#00FFC2] file:mr-4 file:py-1 file:px-2 file:rounded file:border-0 file:text-2xs file:font-semibold file:bg-gray-800 file:text-white hover:file:bg-gray-700 cursor-pointer" />
+                    <div class="w-full border-t border-white/5 pt-3">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 text-center">Or select from gallery</label>
+                        <input type="file" id="mobileFile" accept="image/*" capture="environment" onchange="submitMobileFile(this)" class="w-full text-xs text-slate-400 bg-slate-950 border border-white/10 rounded-xl p-2 focus:outline-none file:mr-3 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-3xs file:font-bold file:bg-[#00FFC2] file:text-black cursor-pointer" />
                     </div>
                 </div>
-                
-                <p class="text-xs text-gray-400">Rear camera and GPS will be captured</p>
             </div>
             
-            <button onclick="closeModal()" class="mt-6 text-sm text-gray-500 hover:text-white transition-all">Cancel</button>
+            <button onclick="closeModal()" class="mt-4 text-xs text-slate-500 hover:text-slate-300 font-bold uppercase tracking-wider transition-all">Cancel</button>
+        </div>
+    </div>
+
+    <!-- AI Diagnostic Wizard Overlay -->
+    <div id="aiWizardModal" class="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center hidden">
+        <div class="glass-panel p-6 rounded-2xl max-w-md w-full mx-4 text-left overflow-y-auto max-h-[90vh] border border-white/10 shadow-2xl">
+            <h2 class="text-xl font-bold mb-1 text-white flex items-center gap-2">
+                <span>✨</span> AI Diagnostic Preview
+            </h2>
+            <p class="text-slate-400 text-xs mb-4">Review and customize the automated diagnostics before submission.</p>
+            
+            <!-- Preview image -->
+            <div class="mb-4 relative rounded-xl overflow-hidden bg-slate-900 border border-white/5 aspect-video">
+                <img id="wizardPreviewImage" class="w-full h-full object-cover" src="" />
+                <div id="wizardCoordsIndicator" class="absolute bottom-2 left-2 bg-black/60 backdrop-blur px-2.5 py-1 rounded-lg text-3xs text-[#00FFC2] border border-white/5">
+                    Lat: --, Lng: --
+                </div>
+            </div>
+
+            <form id="wizardForm" onsubmit="event.preventDefault(); submitFinalReport();" class="space-y-3.5">
+                <div>
+                    <label class="block text-3xs font-bold text-slate-500 uppercase tracking-wider mb-1">Tags (Comma Separated)</label>
+                    <input type="text" id="wizardTags" class="w-full text-xs text-slate-100 bg-slate-950 border border-white/15 rounded-lg p-2.5 focus:outline-none focus:border-[#00FFC2]" />
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-3xs font-bold text-slate-500 uppercase tracking-wider mb-1">Department</label>
+                        <select id="wizardDept" class="w-full text-xs text-slate-100 bg-slate-950 border border-white/15 rounded-lg p-2.5 focus:outline-none focus:border-[#00FFC2] cursor-pointer">
+                            <option value="Roads & Traffic">Roads & Traffic</option>
+                            <option value="Public Works">Public Works</option>
+                            <option value="Water Sanitation">Water Sanitation</option>
+                            <option value="Electrical">Electrical</option>
+                            <option value="Waste Management">Waste Management</option>
+                            <option value="Forestry & Parks">Forestry & Parks</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-3xs font-bold text-slate-500 uppercase tracking-wider mb-1">Priority Scale</label>
+                        <select id="wizardPriority" class="w-full text-xs text-slate-100 bg-slate-950 border border-white/15 rounded-lg p-2.5 focus:outline-none focus:border-[#00FFC2] cursor-pointer">
+                            <option value="1">Level 1 (Low)</option>
+                            <option value="2">Level 2</option>
+                            <option value="3">Level 3 (Medium)</option>
+                            <option value="4">Level 4</option>
+                            <option value="5">Level 5 (Critical)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-3xs font-bold text-slate-500 uppercase tracking-wider mb-1">Hazard Description</label>
+                    <textarea id="wizardDesc" rows="3" class="w-full text-xs text-slate-100 bg-slate-950 border border-white/15 rounded-lg p-2.5 focus:outline-none focus:border-[#00FFC2]" placeholder="AI analysis details..."></textarea>
+                </div>
+
+                <div class="flex gap-2.5 pt-2">
+                    <button type="button" onclick="closeWizard()" class="flex-1 bg-slate-900 border border-white/10 text-slate-300 font-bold text-xs py-3 rounded-lg transition-all hover:bg-slate-800">
+                        Cancel
+                    </button>
+                    <button type="submit" class="flex-1 bg-gradient-to-r from-[#00FFC2] to-emerald-400 hover:scale-[1.02] active:scale-[0.98] text-black font-bold text-xs py-3 rounded-lg transition-all shadow-lg shadow-emerald-500/20">
+                        Confirm & Submit
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- AI Diagnostic Loader -->
+    <div id="loadingModal" class="fixed inset-0 bg-black/80 z-[70] flex flex-col items-center justify-center hidden">
+        <div class="flex flex-col items-center space-y-4">
+            <div class="relative w-14 h-14">
+                <div class="absolute inset-0 rounded-full border-4 border-slate-800"></div>
+                <div class="absolute inset-0 rounded-full border-4 border-t-[#00FFC2] animate-spin"></div>
+            </div>
+            <p class="text-[#00FFC2] font-semibold text-sm tracking-wide">AI Running Diagnostics...</p>
+            <p class="text-3xs text-slate-400 uppercase tracking-wider">Classifying tags and prioritizing issue severity...</p>
         </div>
     </div>
 
@@ -173,12 +350,104 @@
         let isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
         let activeSessionToken = null;
         let pollingInterval = null;
+        let currentUser = null;
 
-        // Initialize Map with zoom constraints & auto-location centering
+        // Wizard temporary states
+        let wizardFile = null;          // Direct file object if local
+        let wizardImagePath = null;     // Server path if bridge upload
+        let wizardLat = null;
+        let wizardLng = null;
+
+        // Initialize Web GIS
+        window.onload = function () {
+            initMap();
+            
+            // Check Google authentication GSI API
+            try {
+                google.accounts.id.initialize({
+                    client_id: "67665301986-dummy.apps.googleusercontent.com",
+                    callback: handleCredentialResponse
+                });
+                google.accounts.id.renderButton(
+                    document.getElementById("g-login-btn"),
+                    { theme: "dark", size: "medium" }
+                );
+            } catch (e) {
+                console.warn("Google Client SDK loading bypassed or unconfigured.", e);
+            }
+            
+            // Restore local session
+            const cachedUser = localStorage.getItem("user");
+            if (cachedUser) {
+                currentUser = JSON.parse(cachedUser);
+                updateUIForLoggedInUser();
+            }
+
+            // Mobile bridged camera auto-trigger
+            const params = new URLSearchParams(window.location.search);
+            if (params.get("session")) {
+                triggerReportFlow();
+            }
+        };
+
+        // GSI Sign-In response handler
+        function handleCredentialResponse(response) {
+            try {
+                const base64Url = response.credential.split('.')[1];
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(''));
+                
+                const payload = JSON.parse(jsonPayload);
+                currentUser = {
+                    email: payload.email,
+                    name: payload.name,
+                    avatar: payload.picture
+                };
+                localStorage.setItem("user", JSON.stringify(currentUser));
+                updateUIForLoggedInUser();
+            } catch (err) {
+                console.error("JWT decoding failed", err);
+            }
+        }
+
+        function triggerMockLogin() {
+            currentUser = {
+                email: "shiva@civicfix.org",
+                name: "Shiva",
+                avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=shiva"
+            };
+            localStorage.setItem("user", JSON.stringify(currentUser));
+            updateUIForLoggedInUser();
+        }
+
+        function handleLogout() {
+            localStorage.removeItem("user");
+            currentUser = null;
+            document.getElementById("user-profile").classList.add("hidden");
+            document.getElementById("auth-panel").classList.remove("hidden");
+            loadMyReports();
+            loadLeaderboard();
+        }
+
+        function updateUIForLoggedInUser() {
+            document.getElementById("auth-panel").classList.add("hidden");
+            const profile = document.getElementById("user-profile");
+            profile.classList.remove("hidden");
+            document.getElementById("user-avatar").src = currentUser.avatar;
+            document.getElementById("user-name").textContent = currentUser.name;
+            
+            // Load custom views
+            loadMyReports();
+            loadLeaderboard();
+        }
+
+        // Initialize Map viewport
         function initMap() {
             map = L.map('map', { 
                 zoomControl: false,
-                minZoom: 11, // Prevent zooming out to national borders
+                minZoom: 11,
                 maxZoom: 18
             }).setView([12.9716, 77.5946], 13);
             
@@ -187,12 +456,9 @@
                 minZoom: 11
             }).addTo(map);
 
-            // Auto-detect location and center map
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition((pos) => {
-                    map.setView([pos.coords.latitude, pos.coords.longitude], 14);
-                }, (err) => {
-                    console.log("Auto-location failed or denied:", err.message);
+                    map.setView([pos.coords.latitude, pos.coords.longitude], 13);
                 });
             }
             
@@ -200,31 +466,19 @@
             loadLeaderboard();
         }
 
-        // Location helpers
-        function jumpToCity() {
-            const select = document.getElementById("citySelect");
-            if (select.value) {
-                const [lat, lng] = select.value.split(",").map(Number);
-                map.setView([lat, lng], 13);
-            }
+        // Tab Switching
+        function switchTab(tabId) {
+            document.querySelectorAll(".tab-btn").forEach(btn => {
+                btn.className = "tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-slate-400 hover:bg-white/5";
+            });
+            document.querySelectorAll(".tab-content").forEach(c => c.classList.add("hidden"));
+            
+            const activeBtn = document.getElementById("tab-" + tabId);
+            activeBtn.className = "tab-btn px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-[#00FFC2]/15 text-[#00FFC2] border border-[#00FFC2]/20";
+            
+            document.getElementById("content-" + tabId).classList.remove("hidden");
         }
 
-        // Auto-pan to pasted coordinates robustly
-        function onCoordsInput() {
-            const input = document.getElementById("customCoords").value.trim();
-            if (input) {
-                const matches = input.match(/-?\d+(\.\d+)?/g);
-                if (matches && matches.length >= 2) {
-                    const lat = parseFloat(matches[0]);
-                    const lng = parseFloat(matches[1]);
-                    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
-                        map.setView([lat, lng], 14);
-                    }
-                }
-            }
-        }
-
-        // Toggle navigation options visibility
         function toggleNavOptions() {
             const panel = document.getElementById("advancedNavOptions");
             const arrow = document.getElementById("navToggleArrow");
@@ -237,7 +491,24 @@
             }
         }
 
-        // Center map on user's current location with a subtle marker indicator
+        function jumpToCity() {
+            const select = document.getElementById("citySelect");
+            if (select.value) {
+                const [lat, lng] = select.value.split(",").map(Number);
+                map.setView([lat, lng], 13);
+            }
+        }
+
+        function onCoordsInput() {
+            const val = document.getElementById("customCoords").value.trim();
+            if (val) {
+                const parts = val.split(",").map(Number);
+                if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                    map.setView([parts[0], parts[1]], 14);
+                }
+            }
+        }
+
         function useCurrentLocation() {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition((pos) => {
@@ -245,48 +516,50 @@
                     const lng = pos.coords.longitude;
                     map.setView([lat, lng], 14);
                     
-                    // Add a temporary marker at current location
-                    const userLocMarker = L.circleMarker([lat, lng], {
+                    const marker = L.circleMarker([lat, lng], {
                         radius: 8,
                         fillColor: '#00FFC2',
-                        color: '#08080C',
+                        color: '#030305',
                         weight: 2,
                         opacity: 1,
                         fillOpacity: 0.9
                     }).addTo(map)
-                      .bindPopup("<b>Your Current Location</b>")
+                      .bindPopup("<div class='text-black font-semibold text-xs'>Your Location</div>")
                       .openPopup();
                       
-                    // Auto remove marker after 5 seconds to keep map clean
-                    setTimeout(() => {
-                        map.removeLayer(userLocMarker);
-                    }, 5000);
+                    setTimeout(() => map.removeLayer(marker), 5000);
                 }, (err) => {
-                    console.error("Geolocation failed:", err);
-                    alert("Could not access your location. Please check your browser permissions.");
+                    alert("Could not retrieve GPS lock. Please check browser settings.");
                 });
-            } else {
-                alert("Geolocation is not supported by your browser.");
             }
         }
 
-        // Fetch leaderboard scores
+        // Load Leaderboard
         async function loadLeaderboard() {
             try {
                 const resp = await fetch("/api/leaderboard");
                 const list = await resp.json();
-                const container = document.getElementById("leaderboard");
+                const container = document.getElementById("leaderboard-list");
                 container.innerHTML = "";
+                
                 if (list.length === 0) {
-                    container.innerHTML = "<p class='text-gray-500 text-xs'>No community activity yet.</p>";
+                    container.innerHTML = "<p class='text-slate-500 text-xs italic text-center'>No active users.</p>";
                     return;
                 }
+                
                 list.forEach((user, idx) => {
                     const row = document.createElement("div");
-                    row.className = "flex justify-between border-b border-gray-800 pb-1 text-xs";
+                    row.className = "flex items-center justify-between border-b border-white/5 pb-2 text-xs hover:bg-white/5 p-1 rounded transition-all";
                     row.innerHTML = `
-                        <span>${idx + 1}. ${user.username}</span>
-                        <span class="text-[#00FFC2] font-semibold">${user.civic_points} pts</span>
+                        <div class="flex items-center space-x-2.5">
+                            <span class="text-slate-500 font-bold w-4 text-center">${idx + 1}</span>
+                            <img src="${user.avatar_url || 'https://api.dicebear.com/7.x/bottts/svg?seed=' + user.username}" class="w-6.5 h-6.5 rounded-full border border-white/10" />
+                            <span class="text-slate-200 font-medium">${user.username}</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-[#00FFC2] font-bold">${user.civic_points} pts</span>
+                            <span class="text-[10px] text-slate-500 block">${user.reports_submitted || 0} reports</span>
+                        </div>
                     `;
                     container.appendChild(row);
                 });
@@ -295,12 +568,50 @@
             }
         }
 
-        // Fetch reports and draw pins
+        // Load Personal Reports list
+        async function loadMyReports() {
+            const container = document.getElementById("my-reports-list");
+            if (!currentUser) {
+                container.innerHTML = "<p class='text-slate-500 text-xs italic text-center'>Log in to view your reports.</p>";
+                return;
+            }
+            try {
+                const resp = await fetch(`/api/reports/my-reports/${currentUser.email}`);
+                const data = await resp.json();
+                container.innerHTML = "";
+                
+                if (data.length === 0) {
+                    container.innerHTML = "<p class='text-slate-500 text-xs italic text-center'>You haven't submitted any reports yet.</p>";
+                    return;
+                }
+
+                data.forEach(r => {
+                    const statusColor = r.status === 'Resolved' ? 'bg-[#00FFC2]/20 text-[#00FFC2]' : 'bg-red-500/20 text-red-400';
+                    const div = document.createElement("div");
+                    div.className = "glass-card rounded-xl p-3.5 space-y-2 text-xs";
+                    div.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <span class="font-mono font-bold text-slate-300">${r.id}</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${statusColor}">${r.status}</span>
+                        </div>
+                        <p class="text-slate-400 text-[11px]"><b>Dept:</b> ${r.department} | <b>Priority:</b> Lvl ${r.priority}</p>
+                        <div class="flex gap-2 items-center">
+                            <img src="${r.image_path}" class="w-12 h-12 object-cover rounded border border-white/10" />
+                            <span class="text-slate-500 text-[10px]">${new Date(r.created_at).toLocaleString()}</span>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            } catch(e) {
+                container.innerHTML = "<p class='text-red-400 text-xs italic text-center'>Error loading list.</p>";
+            }
+        }
+
+        // Fetch reports list & draw pins
         async function loadReports() {
             const resp = await fetch("/api/reports/list");
             const reports = await resp.json();
             
-            // Clear existing markers
             activeMarkers.forEach(m => map.removeLayer(m));
             activeMarkers = [];
             
@@ -308,40 +619,57 @@
             officerList.innerHTML = "";
             
             reports.forEach(r => {
-                const color = r.status === 'Resolved' ? '#00FFC2' : (r.priority >= 4 ? '#FF5E5E' : '#FFD700');
+                const color = r.status === 'Resolved' ? '#00FFC2' : (r.priority >= 4 ? '#EF4444' : '#F59E0B');
                 const marker = L.circleMarker([r.latitude, r.longitude], {
                     radius: 8,
                     fillColor: color,
-                    color: '#08080C',
+                    color: '#030305',
                     weight: 2,
                     opacity: 1,
-                    fillOpacity: 0.8
+                    fillOpacity: 0.9
                 }).addTo(map);
                 
+                // Beautiful hover tooltip cards displaying the image thumbnail
+                const tooltipContent = `
+                    <div class="glass-panel p-2.5 rounded-xl border border-white/10 shadow-2xl flex flex-col items-center text-center text-xs" style="min-width: 140px;">
+                        <img src="${r.image_path}" class="w-24 h-24 object-cover rounded-lg border border-white/10 mb-2" />
+                        <span class="font-mono font-bold text-white block mb-0.5">${r.id}</span>
+                        <span class="text-[10px] text-slate-400 block">${r.department}</span>
+                        <span class="inline-block mt-1.5 px-2 py-0.5 rounded text-[8px] font-extrabold uppercase" style="background-color: ${color}; color: #030305;">
+                            ${r.status}
+                        </span>
+                    </div>
+                `;
+                marker.bindTooltip(tooltipContent, {
+                    direction: 'top',
+                    permanent: false,
+                    sticky: true,
+                    opacity: 0.95
+                });
+
                 marker.bindPopup(`
-                    <div class="text-black text-xs font-sans">
-                        <b class="text-gray-900">ID:</b> ${r.id}<br/>
+                    <div class="text-black text-xs font-sans p-1">
+                        <b>ID:</b> ${r.id}<br/>
                         <b>Dept:</b> ${r.department}<br/>
                         <b>Priority:</b> Level ${r.priority}<br/>
                         <b>Status:</b> <span class="font-bold text-blue-600">${r.status}</span><br/>
                         <b>Votes:</b> ${r.votes}<br/>
-                        <button onclick="voteIssue('${r.id}')" class="mt-2 bg-[#00FFC2] text-black font-semibold px-2 py-1 rounded text-2xs">Support Issue</button>
+                        <button onclick="voteIssue('${r.id}')" class="mt-2 w-full bg-[#00FFC2] text-black font-bold px-2 py-1 rounded text-2xs transition-all hover:scale-105">Upvote Report</button>
                     </div>
                 `);
                 
                 activeMarkers.push(marker);
                 
-                // Add to Officer task list if unresolved
                 if (r.status !== 'Resolved') {
                     const div = document.createElement("div");
-                    div.className = "bg-gray-900 border border-gray-800 p-3 rounded text-sm";
+                    div.className = "glass-card rounded-xl p-3.5 space-y-2 text-xs";
                     div.innerHTML = `
-                        <div class="flex justify-between font-bold mb-1">
-                            <span>${r.id}</span>
-                            <span class="text-red-400">Priority: ${r.priority}</span>
+                        <div class="flex justify-between items-center">
+                            <span class="font-mono font-bold text-slate-300">${r.id}</span>
+                            <span class="text-red-400 font-semibold">Priority: ${r.priority}</span>
                         </div>
-                        <p class="text-gray-400 text-xs mb-2">Dept: ${r.department}</p>
-                        <button onclick="resolveReport('${r.id}')" class="w-full bg-[#00FFC2] text-black font-semibold text-xs py-1 rounded">Mark Resolved</button>
+                        <p class="text-slate-400 text-[11px]">Dept: ${r.department}</p>
+                        <button onclick="resolveReport('${r.id}')" class="w-full bg-[#00FFC2] hover:bg-[#00e5b0] text-black font-bold text-2xs py-2 rounded-lg transition-all">Mark Resolved</button>
                     `;
                     officerList.appendChild(div);
                 }
@@ -351,12 +679,12 @@
         async function voteIssue(reportId) {
             const resp = await fetch(`/api/reports/vote/${reportId}`, { method: "POST" });
             if (resp.ok) {
-                alert("Upvote/Verification submitted successfully!");
+                alert("Upvote registered!");
                 loadReports();
             }
         }
 
-        // Trigger Report Modal Flow
+        // Trigger Report modal flow
         async function triggerReportFlow() {
             document.getElementById("modalOverlay").classList.remove("hidden");
             const params = new URLSearchParams(window.location.search);
@@ -370,12 +698,10 @@
                 document.getElementById("desktopBridgeView").classList.remove("hidden");
                 document.getElementById("mobileCaptureView").classList.add("hidden");
                 
-                // Create Session
                 const resp = await fetch("/api/sessions/create", { method: "POST" });
                 const data = await resp.json();
                 activeSessionToken = data.token;
                 
-                // Generate QR pointing to mobile upload page
                 const qrUrl = window.location.origin + "?session=" + activeSessionToken;
                 document.getElementById("qrcode").innerHTML = "";
                 const typeNumber = 0;
@@ -383,24 +709,38 @@
                 const qr = qrcode(typeNumber, errorCorrectionLevel);
                 qr.addData(qrUrl);
                 qr.make();
-                document.getElementById("qrcode").innerHTML = qr.createImgTag(5);
+                document.getElementById("qrcode").innerHTML = qr.createImgTag(4);
                 
-                // Poll status
                 startPolling(activeSessionToken);
             }
         }
 
+        // Poll QR session status
         function startPolling(token) {
             if (pollingInterval) clearInterval(pollingInterval);
             pollingInterval = setInterval(async () => {
                 const resp = await fetch("/api/sessions/status/" + token);
                 const data = await resp.json();
-                if (data.status === 'uploaded') {
+                
+                // If draft data is loaded from mobile, open AI preview wizard
+                if (data.status === 'draft' && data.draft_data) {
+                    clearInterval(pollingInterval);
+                    closeModal();
+                    
+                    // Open AI wizard with draft details
+                    const draft = data.draft_data;
+                    wizardImagePath = draft.image_path;
+                    wizardLat = draft.latitude;
+                    wizardLng = draft.longitude;
+                    wizardFile = null; // Stored on server already
+
+                    openWizard(draft.image_path, draft.latitude, draft.longitude, draft.tags, draft.department, draft.priority, draft.analysis);
+                } else if (data.status === 'uploaded') {
                     clearInterval(pollingInterval);
                     closeModal();
                     loadReports();
                     loadLeaderboard();
-                    alert("Report successfully uploaded from your mobile device!");
+                    alert("Report submitted successfully via phone.");
                 }
             }, 2000);
         }
@@ -423,21 +763,84 @@
             }
         }
 
+        function closeModal() {
+            document.getElementById("modalOverlay").classList.add("hidden");
+            document.getElementById("directUploadView").classList.add("hidden");
+            document.getElementById("desktopBridgeView").classList.add("hidden");
+            document.getElementById("mobileCaptureView").classList.add("hidden");
+            document.getElementById("directFile").value = "";
+            const mobileFile = document.getElementById("mobileFile");
+            if (mobileFile) mobileFile.value = "";
+            stopCamera();
+            if (pollingInterval) clearInterval(pollingInterval);
+        }
+
+        // Direct upload: send to /api/reports/analyze first
+        async function submitDirectReportImage() {
+            const fileInput = document.getElementById("directFile");
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert("Please select a photo to analyze.");
+                return;
+            }
+            const file = fileInput.files[0];
+            
+            // Get coordinates
+            const center = map.getCenter();
+            const submitWithCoords = (latitude, longitude) => {
+                closeModal();
+                showLoader(true);
+                
+                const formData = new FormData();
+                formData.append("image", file);
+                
+                fetch("/api/reports/analyze", {
+                    method: "POST",
+                    body: formData
+                })
+                .then(res => res.json())
+                .then(aiData => {
+                    showLoader(false);
+                    
+                    // Cache direct file & position context
+                    wizardFile = file;
+                    wizardImagePath = null;
+                    wizardLat = latitude;
+                    wizardLng = longitude;
+                    
+                    // Create temporary preview URL for display
+                    const previewUrl = URL.createObjectURL(file);
+                    openWizard(previewUrl, latitude, longitude, aiData.tags, aiData.department, aiData.priority, aiData.analysis);
+                })
+                .catch(err => {
+                    showLoader(false);
+                    alert("AI analysis request failed. Try again.");
+                });
+            };
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => submitWithCoords(pos.coords.latitude, pos.coords.longitude),
+                    () => submitWithCoords(center.lat, center.lng)
+                );
+            } else {
+                submitWithCoords(center.lat, center.lng);
+            }
+        }
+
+        // Mobile upload helper (saves snapshot to session draft)
         function capturePhoto() {
-            navigator.geolocation.getCurrentPosition(async (pos) => {
+            navigator.geolocation.getCurrentPosition((pos) => {
                 const video = document.getElementById("videoView");
                 const canvas = document.getElementById("photoCanvas");
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(video, 0, 0);
+                canvas.getContext('2d').drawImage(video, 0, 0);
                 
                 canvas.toBlob(async (blob) => {
                     const formData = new FormData();
-                    formData.append("image", blob, "report.jpg");
+                    formData.append("image", blob, "camera.jpg");
                     formData.append("latitude", pos.coords.latitude);
                     formData.append("longitude", pos.coords.longitude);
-                    formData.append("username", prompt("Enter your username for Leaderboard points:", "Hero"));
                     
                     let url = "/api/reports/submit";
                     const params = new URLSearchParams(window.location.search);
@@ -452,11 +855,8 @@
                     });
                     
                     if (resp.ok) {
-                        alert("Report successfully logged!");
+                        alert("Snapshot uploaded to draft! Please check computer screen.");
                         closeModal();
-                        loadReports();
-                        loadLeaderboard();
-                        // Redirect to clean home page if we were on a bridged upload session
                         if (sessionToken) {
                             window.location.href = window.location.origin;
                         }
@@ -465,29 +865,17 @@
             });
         }
 
-        function closeModal() {
-            document.getElementById("modalOverlay").classList.add("hidden");
-            document.getElementById("directUploadView").classList.add("hidden");
-            document.getElementById("desktopBridgeView").classList.add("hidden");
-            document.getElementById("mobileCaptureView").classList.add("hidden");
-            document.getElementById("directFile").value = "";
-            const mobileFile = document.getElementById("mobileFile");
-            if (mobileFile) mobileFile.value = "";
-            stopCamera();
-            if (pollingInterval) clearInterval(pollingInterval);
-        }
-
+        // Mobile native file upload
         async function submitMobileFile(input) {
             if (!input.files || input.files.length === 0) return;
             const file = input.files[0];
-            const username = prompt("Enter your username for Leaderboard points:", "Hero") || "Hero";
-
-            const submitWithCoords = async (latitude, longitude) => {
+            const center = map.getCenter();
+            
+            const uploadDraft = async (lat, lng) => {
                 const formData = new FormData();
                 formData.append("image", file);
-                formData.append("latitude", latitude);
-                formData.append("longitude", longitude);
-                formData.append("username", username);
+                formData.append("latitude", lat);
+                formData.append("longitude", lng);
 
                 let url = "/api/reports/submit";
                 const params = new URLSearchParams(window.location.search);
@@ -497,43 +885,116 @@
                 }
 
                 try {
-                    const resp = await fetch(url, {
-                        method: "POST",
-                        body: formData
-                    });
+                    const resp = await fetch(url, { method: "POST", body: formData });
                     if (resp.ok) {
-                        alert("Report successfully uploaded!");
+                        alert("Snapshot uploaded! Complete draft on desktop.");
                         closeModal();
                         if (sessionToken) {
                             window.location.href = window.location.origin;
-                        } else {
-                            loadReports();
-                            loadLeaderboard();
                         }
                     } else {
-                        const errData = await resp.json();
-                        alert("Upload failed: " + (errData.detail || "Error"));
+                        alert("Upload failed.");
                     }
                 } catch(e) {
-                    console.error(e);
-                    alert("Network error: Upload failed.");
+                    alert("Network error.");
                 }
             };
 
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                        submitWithCoords(pos.coords.latitude, pos.coords.longitude);
-                    },
-                    (err) => {
-                        console.log("GPS failed. Defaulting to map center view.");
-                        const mapCenter = map.getCenter();
-                        submitWithCoords(mapCenter.lat, mapCenter.lng);
-                    }
+                    (pos) => uploadDraft(pos.coords.latitude, pos.coords.longitude),
+                    () => uploadDraft(center.lat, center.lng)
                 );
             } else {
-                const mapCenter = map.getCenter();
-                submitWithCoords(mapCenter.lat, mapCenter.lng);
+                uploadDraft(center.lat, center.lng);
+            }
+        }
+
+        // Open AI diagnostic edit wizard
+        function openWizard(imgSrc, lat, lng, tags, dept, priority, analysis) {
+            document.getElementById("wizardPreviewImage").src = imgSrc;
+            document.getElementById("wizardCoordsIndicator").textContent = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+            
+            document.getElementById("wizardTags").value = Array.isArray(tags) ? tags.join(", ") : tags;
+            document.getElementById("wizardDept").value = dept;
+            document.getElementById("wizardPriority").value = priority;
+            document.getElementById("wizardDesc").value = analysis;
+            
+            document.getElementById("aiWizardModal").classList.remove("hidden");
+        }
+
+        function closeWizard() {
+            document.getElementById("aiWizardModal").classList.add("hidden");
+            wizardFile = null;
+            wizardImagePath = null;
+        }
+
+        function showLoader(show) {
+            const loader = document.getElementById("loadingModal");
+            if (show) loader.classList.remove("hidden");
+            else loader.classList.add("hidden");
+        }
+
+        // Submit final audited report details
+        async function submitFinalReport() {
+            const formData = new FormData();
+            
+            // Image source
+            if (wizardFile) {
+                formData.append("image", wizardFile);
+            } else if (wizardImagePath) {
+                formData.append("image_path", wizardImagePath);
+            } else {
+                alert("Missing report image source.");
+                return;
+            }
+
+            formData.append("latitude", wizardLat);
+            formData.append("longitude", wizardLng);
+            
+            // Format tags as a JSON array string
+            const tagsInput = document.getElementById("wizardTags").value;
+            const tagsList = tagsInput.split(",").map(t => t.trim()).filter(t => t.length > 0);
+            formData.append("tags", JSON.stringify(tagsList));
+            
+            formData.append("department", document.getElementById("wizardDept").value);
+            formData.append("priority", parseInt(document.getElementById("wizardPriority").value));
+            formData.append("description", document.getElementById("wizardDesc").value);
+            
+            // Identity fields
+            const email = currentUser ? currentUser.email : "anonymous@civicfix.org";
+            const name = currentUser ? currentUser.name : "Anonymous";
+            const avatar = currentUser ? currentUser.avatar : "";
+            formData.append("reporter_email", email);
+            formData.append("reporter_name", name);
+            formData.append("reporter_avatar", avatar);
+            
+            if (activeSessionToken) {
+                formData.append("token", activeSessionToken);
+            }
+
+            closeWizard();
+            showLoader(true);
+
+            try {
+                const resp = await fetch("/api/reports/submit", {
+                    method: "POST",
+                    body: formData
+                });
+                
+                showLoader(false);
+                if (resp.ok) {
+                    alert("Report successfully registered!");
+                    loadReports();
+                    loadLeaderboard();
+                    loadMyReports();
+                } else {
+                    const err = await resp.json();
+                    alert("Submission failed: " + (err.detail || "Error"));
+                }
+            } catch(e) {
+                showLoader(false);
+                alert("Network error submitting report.");
             }
         }
 
@@ -547,76 +1008,17 @@
             document.getElementById("desktopBridgeView").classList.remove("hidden");
         }
 
-        async function submitDirectReport() {
-            const fileInput = document.getElementById("directFile");
-            if (!fileInput.files || fileInput.files.length === 0) {
-                alert("Please select an image first.");
-                return;
-            }
-            const file = fileInput.files[0];
-            const username = document.getElementById("directUsername").value.trim() || "Hero";
-
-            // Get location (default to map center if browser geo fails)
-            const mapCenter = map.getCenter();
-            const defaultLat = mapCenter.lat;
-            const defaultLng = mapCenter.lng;
-
-            const submitWithCoords = async (latitude, longitude) => {
-                const formData = new FormData();
-                formData.append("image", file);
-                formData.append("latitude", latitude);
-                formData.append("longitude", longitude);
-                formData.append("username", username);
-
-                try {
-                    const resp = await fetch("/api/reports/submit", {
-                        method: "POST",
-                        body: formData
-                    });
-
-                    if (resp.ok) {
-                        alert("Report successfully logged from this device!");
-                        closeModal();
-                        loadReports();
-                        loadLeaderboard();
-                    } else {
-                        const errData = await resp.json();
-                        alert("Error: " + (errData.detail || "Failed to submit report"));
-                    }
-                } catch (e) {
-                    console.error("Submission failed", e);
-                    alert("Network error: Failed to connect to server.");
-                }
-            };
-
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                        submitWithCoords(pos.coords.latitude, pos.coords.longitude);
-                    },
-                    (err) => {
-                        console.log("Browser location failed or denied. Defaulting to current map center view.");
-                        submitWithCoords(defaultLat, defaultLng);
-                    }
-                );
-            } else {
-                submitWithCoords(defaultLat, defaultLng);
-            }
-        }
-
         function toggleRole() {
             const role = document.getElementById("roleToggle").value;
+            switchTab('report');
             if (role === 'citizen') {
-                document.getElementById("citizenPanel").classList.remove("hidden");
-                document.getElementById("officerPanel").classList.add("hidden");
+                document.getElementById("tab-officer").classList.add("hidden");
             } else {
-                document.getElementById("citizenPanel").classList.add("hidden");
-                document.getElementById("officerPanel").classList.remove("hidden");
+                document.getElementById("tab-officer").classList.remove("hidden");
             }
         }
 
         async function resolveReport(reportId) {
-            // Mock resolver photo upload
             const input = document.createElement("input");
             input.type = "file";
             input.accept = "image/*";
@@ -639,14 +1041,25 @@
             input.click();
         }
 
-        window.onload = () => {
-            initMap();
-            // Automatically trigger camera stream if mobile session is present in URL
-            const params = new URLSearchParams(window.location.search);
-            if (params.get("session")) {
-                triggerReportFlow();
+        async function trackReport() {
+            const trackId = document.getElementById("trackingId").value.trim().toUpperCase();
+            if (!trackId) {
+                alert("Please enter a valid report ID.");
+                return;
             }
-        };
+            try {
+                const resp = await fetch(`/api/reports/track/${trackId}`);
+                if (!resp.ok) {
+                    alert("Report ID not found.");
+                    return;
+                }
+                const r = await resp.json();
+                map.setView([r.latitude, r.longitude], 15);
+                alert(`Report Found!\nID: ${r.id}\nDept: ${r.department}\nPriority: Lvl ${r.priority}\nStatus: ${r.status}`);
+            } catch(e) {
+                alert("Failed to track report.");
+            }
+        }
     </script>
 </body>
 </html>

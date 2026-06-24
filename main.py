@@ -34,26 +34,56 @@ def get_distance(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
+@app.post("/api/reports/analyze")
+async def analyze_photo(image: UploadFile = File(...)):
+    contents = await image.read()
+    ai_data = gemini_service.analyze_report_image(contents)
+    return ai_data
+
 @app.post("/api/reports/submit")
 async def submit_report(
-    image: UploadFile = File(...),
+    image: UploadFile = File(None),
+    image_path: str = Form(None),
     latitude: float = Form(...),
     longitude: float = Form(...),
-    username: str = Form("Anonymous")
+    tags: str = Form(...), # JSON serialized tags list
+    department: str = Form(...),
+    priority: int = Form(...),
+    description: str = Form(...),
+    reporter_email: str = Form("anonymous@civicfix.org"),
+    reporter_name: str = Form("Anonymous"),
+    reporter_avatar: str = Form(""),
+    token: str = Form(None) # Optional QR session token to link
 ):
-    contents = await image.read()
     report_id = f"CF-{uuid.uuid4().hex[:6].upper()}"
     filename = f"{report_id}_before.jpg"
     filepath = os.path.join("/tmp/uploads", filename)
-    with open(filepath, "wb") as f:
-        f.write(contents)
-        
-    # Analyze photo via Gemini
-    ai_data = gemini_service.analyze_report_image(contents)
     
-    # Basic clustering: If any open report is within 75 meters (0.075 km), link it
+    if image:
+        contents = await image.read()
+        with open(filepath, "wb") as f:
+            f.write(contents)
+    elif image_path:
+        # Secure path checking
+        if not os.path.abspath(image_path).startswith("/tmp/uploads/"):
+            raise HTTPException(status_code=400, detail="Invalid image path")
+        if not os.path.exists(image_path):
+            raise HTTPException(status_code=404, detail="Draft image not found")
+        # Copy the temporary draft image to the final location
+        with open(image_path, "rb") as src, open(filepath, "wb") as dst:
+            dst.write(src.read())
+    else:
+        raise HTTPException(status_code=400, detail="No image provided")
+        
+    try:
+        tags_list = json.loads(tags)
+    except Exception:
+        tags_list = [tags]
+        
     conn = database.get_db()
     cursor = conn.cursor()
+    
+    # Basic clustering: If any open report is within 75 meters (0.075 km), link it
     cursor.execute("SELECT id, latitude, longitude, priority, votes FROM reports WHERE status != 'Resolved'")
     active_reports = cursor.fetchall()
     
@@ -65,26 +95,50 @@ async def submit_report(
             # Auto-upvote adjacent issue
             cursor.execute("UPDATE reports SET votes = votes + 1 WHERE id = ?", (rep["id"],))
             
-    conn.commit()
-    
-    # Calculate scaled priority
-    final_priority = min(5, ai_data["priority"] + priority_bonus)
+    final_priority = min(5, priority + priority_bonus)
     now_str = datetime.utcnow().isoformat()
     
-    # Insert report
+    # Insert report with reporter context
     cursor.execute("""
-    INSERT INTO reports (id, latitude, longitude, image_path, tags, department, priority, votes, status, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (report_id, latitude, longitude, filepath, json.dumps(ai_data["tags"]), ai_data["department"], final_priority, 1, "Reported", now_str, now_str))
+    INSERT INTO reports (
+        id, latitude, longitude, image_path, tags, department, priority, 
+        votes, status, created_at, updated_at, reporter_email, reporter_name
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        report_id, latitude, longitude, filepath, json.dumps(tags_list), 
+        department, final_priority, 1, "Reported", now_str, now_str, 
+        reporter_email, reporter_name
+    ))
     
-    # Update leaderboard
-    cursor.execute("INSERT OR IGNORE INTO leaderboard (username, civic_points, reports_submitted) VALUES (?, 0, 0)", (username,))
-    cursor.execute("UPDATE leaderboard SET civic_points = civic_points + 10, reports_submitted = reports_submitted + 1 WHERE username = ?", (username,))
-    
+    # Upsert leaderboard info
+    cursor.execute("SELECT civic_points, reports_submitted FROM leaderboard WHERE email = ?", (reporter_email,))
+    lead_row = cursor.fetchone()
+    if lead_row:
+        new_pts = lead_row["civic_points"] + 10
+        new_subs = lead_row["reports_submitted"] + 1
+        cursor.execute("UPDATE leaderboard SET civic_points = ?, reports_submitted = ?, username = ?, avatar_url = ? WHERE email = ?", (
+            new_pts, new_subs, reporter_name, reporter_avatar, reporter_email
+        ))
+    else:
+        cursor.execute("""
+        INSERT INTO leaderboard (email, username, avatar_url, civic_points, reports_submitted)
+        VALUES (?, ?, ?, 10, 1)
+        """, (reporter_email, reporter_name, reporter_avatar))
+        
+    # Link QR session if token is provided
+    if token:
+        cursor.execute("UPDATE qr_sessions SET status = 'uploaded', associated_report_id = ? WHERE token = ?", (report_id, token))
+        
     conn.commit()
     conn.close()
     
-    return {"id": report_id, "status": "Reported", "tags": ai_data["tags"], "department": ai_data["department"], "priority": final_priority}
+    return {
+        "id": report_id, 
+        "status": "Reported", 
+        "tags": tags_list, 
+        "department": department, 
+        "priority": final_priority
+    }
 
 @app.post("/api/reports/vote/{id}")
 async def vote_report(id: str):
@@ -134,6 +188,15 @@ async def get_leaderboard():
     conn.close()
     return [dict(row) for row in rows]
 
+@app.get("/api/reports/my-reports/{email}")
+async def get_my_reports(email: str):
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM reports WHERE reporter_email = ? ORDER BY created_at DESC", (email,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
 # QR Session API endpoints for Cross-Device upload
 @app.post("/api/sessions/create")
 async def create_session():
@@ -149,20 +212,23 @@ async def create_session():
 async def get_session_status(token: str):
     conn = database.get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT status, associated_report_id FROM qr_sessions WHERE token = ?", (token,))
+    cursor.execute("SELECT status, associated_report_id, draft_data FROM qr_sessions WHERE token = ?", (token,))
     row = cursor.fetchone()
     conn.close()
     if not row:
         raise HTTPException(status_code=404, detail="Session not found")
-    return dict(row)
+    
+    res = dict(row)
+    if res.get("draft_data"):
+        res["draft_data"] = json.loads(res["draft_data"])
+    return res
 
 @app.post("/api/sessions/upload/{token}")
 async def upload_session_photo(
     token: str,
     image: UploadFile = File(...),
     latitude: float = Form(...),
-    longitude: float = Form(...),
-    username: str = Form("Anonymous")
+    longitude: float = Form(...)
 ):
     conn = database.get_db()
     cursor = conn.cursor()
@@ -172,12 +238,34 @@ async def upload_session_photo(
         conn.close()
         raise HTTPException(status_code=404, detail="Session not found")
     
-    # Process submission
-    report = await submit_report(image, latitude, longitude, username)
-    cursor.execute("UPDATE qr_sessions SET status = 'uploaded', associated_report_id = ? WHERE token = ?", (report["id"], token))
+    contents = await image.read()
+    filename = f"draft_{token}.jpg"
+    filepath = os.path.join("/tmp/uploads", filename)
+    with open(filepath, "wb") as f:
+        f.write(contents)
+        
+    # Analyze the photo via Gemini
+    ai_data = gemini_service.analyze_report_image(contents)
+    
+    # Store draft details
+    draft_data = {
+        "image_path": f"/tmp/uploads/{filename}",
+        "latitude": latitude,
+        "longitude": longitude,
+        "tags": ai_data["tags"],
+        "department": ai_data["department"],
+        "priority": ai_data["priority"],
+        "analysis": ai_data["analysis"]
+    }
+    
+    cursor.execute(
+        "UPDATE qr_sessions SET status = 'draft', draft_data = ? WHERE token = ?",
+        (json.dumps(draft_data), token)
+    )
     conn.commit()
     conn.close()
-    return report
+    
+    return {"status": "draft", "draft_data": draft_data}
 
 @app.post("/api/reports/resolve/{id}")
 async def resolve_report(id: str, resolved_image: UploadFile = File(...)):
