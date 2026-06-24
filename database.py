@@ -88,6 +88,20 @@ def init_db():
     )
     """)
     
+    # Safely migrate reports table by adding missing columns
+    if conn.is_pg:
+        cursor.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS reporter_email TEXT")
+        cursor.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS reporter_name TEXT")
+    else:
+        try:
+            cursor.execute("ALTER TABLE reports ADD COLUMN reporter_email TEXT")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE reports ADD COLUMN reporter_name TEXT")
+        except Exception:
+            pass
+
     # Create qr_sessions table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS qr_sessions (
@@ -98,10 +112,19 @@ def init_db():
     )
     """)
     
-    # Create leaderboard table
+    # We drop the old leaderboard table if it doesn't have the new layout
+    try:
+        # Check if new columns exist
+        cursor.execute("SELECT email FROM leaderboard LIMIT 1")
+    except Exception:
+        # Table doesn't exist or is old format, recreate it
+        cursor.execute("DROP TABLE IF EXISTS leaderboard")
+        
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS leaderboard (
-        username TEXT PRIMARY KEY,
+        email TEXT PRIMARY KEY,
+        username TEXT NOT NULL,
+        avatar_url TEXT NOT NULL,
         civic_points INTEGER DEFAULT 0,
         reports_submitted INTEGER DEFAULT 0
     )
