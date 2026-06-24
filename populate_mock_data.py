@@ -28,22 +28,22 @@ def populate():
     reports = [
         (
             "CF-9A3B", 12.9735, 77.6075, 
-            "/tmp/uploads/pothole_mock.jpg", '["Pothole", "Broken Asphalt"]', 
+            "/uploads/pothole_mock.jpg", '["Pothole", "Broken Asphalt"]', 
             "Roads & Traffic", 4, 12, "Unresolved", "shiva@civicfix.org", "Shiva_The_Fixer"
         ),
         (
             "CF-4D1C", 12.9782, 77.6408, 
-            "/tmp/uploads/fallen_tree_mock.jpg", '["Fallen Tree", "Blocked Lane"]', 
+            "/uploads/fallen_tree_mock.jpg", '["Fallen Tree", "Blocked Lane"]', 
             "Forestry & Parks", 3, 8, "Unresolved", "green@civicfix.org", "GreenCitizen"
         ),
         (
             "CF-8E2A", 12.9345, 77.6101, 
-            "/tmp/uploads/garbage_mock.jpg", '["Garbage Dump", "Public Hazard"]', 
+            "/uploads/garbage_mock.jpg", '["Garbage Dump", "Public Hazard"]', 
             "Sanitation", 2, 5, "Unresolved", "clean@civicfix.org", "CleanUpNow"
         ),
         (
             "CF-1F7D", 12.9298, 77.5812, 
-            "/tmp/uploads/streetlight_mock.jpg", '["Broken Streetlight", "Dark Alley"]', 
+            "/uploads/streetlight_mock.jpg", '["Broken Streetlight", "Dark Alley"]', 
             "Electricity & Lights", 1, 3, "Resolved", "shiva@civicfix.org", "Shiva_The_Fixer"
         )
     ]

@@ -64,13 +64,17 @@ async def submit_report(
         with open(filepath, "wb") as f:
             f.write(contents)
     elif image_path:
+        # Map public URL path to local folder
+        local_path = image_path
+        if image_path.startswith("/uploads/"):
+            local_path = image_path.replace("/uploads/", "/tmp/uploads/", 1)
         # Secure path checking
-        if not os.path.abspath(image_path).startswith("/tmp/uploads/"):
+        if not os.path.abspath(local_path).startswith("/tmp/uploads/"):
             raise HTTPException(status_code=400, detail="Invalid image path")
-        if not os.path.exists(image_path):
+        if not os.path.exists(local_path):
             raise HTTPException(status_code=404, detail="Draft image not found")
         # Copy the temporary draft image to the final location
-        with open(image_path, "rb") as src, open(filepath, "wb") as dst:
+        with open(local_path, "rb") as src, open(filepath, "wb") as dst:
             dst.write(src.read())
     else:
         raise HTTPException(status_code=400, detail="No image provided")
@@ -99,13 +103,14 @@ async def submit_report(
     now_str = datetime.utcnow().isoformat()
     
     # Insert report with reporter context
+    db_image_path = f"/uploads/{filename}"
     cursor.execute("""
     INSERT INTO reports (
         id, latitude, longitude, image_path, tags, department, priority, 
         votes, status, created_at, updated_at, reporter_email, reporter_name
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        report_id, latitude, longitude, filepath, json.dumps(tags_list), 
+        report_id, latitude, longitude, db_image_path, json.dumps(tags_list), 
         department, final_priority, 1, "Reported", now_str, now_str, 
         reporter_email, reporter_name
     ))
@@ -249,7 +254,7 @@ async def upload_session_photo(
     
     # Store draft details
     draft_data = {
-        "image_path": f"/tmp/uploads/{filename}",
+        "image_path": f"/uploads/{filename}",
         "latitude": latitude,
         "longitude": longitude,
         "tags": ai_data["tags"],
@@ -278,7 +283,9 @@ async def resolve_report(id: str, resolved_image: UploadFile = File(...)):
         raise HTTPException(status_code=404, detail="Report not found")
     
     before_filepath = row["image_path"]
-    
+    if before_filepath.startswith("/uploads/"):
+        before_filepath = before_filepath.replace("/uploads/", "/tmp/uploads/", 1)
+        
     # Save resolved image
     after_contents = await resolved_image.read()
     resolved_filename = f"{id}_after.jpg"
@@ -295,11 +302,12 @@ async def resolve_report(id: str, resolved_image: UploadFile = File(...)):
     
     if verify_data["verified"]:
         now_str = datetime.utcnow().isoformat()
+        db_resolved_path = f"/uploads/{resolved_filename}"
         cursor.execute("""
         UPDATE reports 
         SET status = 'Resolved', resolved_image_path = ?, updated_at = ? 
         WHERE id = ?
-        """, (after_filepath, now_str, id))
+        """, (db_resolved_path, now_str, id))
         conn.commit()
     
     conn.close()
@@ -309,7 +317,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 # Expose uploaded images
-app.mount("/tmp/uploads", StaticFiles(directory="/tmp/uploads"), name="uploads")
+app.mount("/tmp/uploads", StaticFiles(directory="/tmp/uploads"), name="uploads_tmp")
+app.mount("/uploads", StaticFiles(directory="/tmp/uploads"), name="uploads")
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard():

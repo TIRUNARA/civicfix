@@ -33,6 +33,12 @@
             backdrop-filter: blur(8px);
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
+        .glass-card:hover {
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(0, 229, 176, 0.25);
+            box-shadow: 0 0 20px rgba(0, 229, 176, 0.08);
+            transform: translateY(-2px);
+        }
         .text-accent {
             color: #00E5B0;
         }
@@ -55,19 +61,20 @@
             background: rgba(15, 23, 42, 0.95) !important;
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        /* Leaflet custom text-only hover tooltip */
         .custom-tooltip {
-            background: #0f172a !important;
+            background: rgba(15, 23, 42, 0.95) !important;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
             color: #f8fafc !important;
-            border: 1px solid rgba(255, 255, 255, 0.15) !important;
-            border-radius: 8px !important;
-            padding: 6px 10px !important;
-            font-size: 11px !important;
-            font-weight: 600 !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            border-radius: 12px !important;
+            padding: 8px !important;
+            box-shadow: 0 12px 24px rgba(0,0,0,0.6) !important;
+            white-space: normal !important;
+            max-width: 200px !important;
         }
         .leaflet-tooltip-top:before {
-            border-top-color: #0f172a !important;
+            border-top-color: rgba(15, 23, 42, 0.95) !important;
         }
     </style>
 </head>
@@ -196,8 +203,8 @@
     </div>
 
     <!-- Detail Modal -->
-    <div id="detailModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-        <div class="glass-panel w-full max-w-2xl rounded-3xl border border-white/10 overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <div id="detailModal" onclick="if(event.target === this) closeDetailModal()" class="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-all duration-300 opacity-0 pointer-events-none">
+        <div class="glass-panel w-full max-w-2xl rounded-3xl border border-white/10 overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transform scale-95 translate-y-4 opacity-0 transition-all duration-300 ease-out">
             <div class="flex items-center justify-between px-6 py-4 border-b border-white/10">
                 <h3 class="text-lg font-bold" id="modalTitle">Report Details</h3>
                 <button onclick="closeDetailModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5">&times;</button>
@@ -378,8 +385,28 @@
                     fillOpacity: 0.85
                 });
 
-                // Custom tooltip on hover
-                marker.bindTooltip(`<b>${r.id}</b><br><span class="text-slate-400">${r.department}</span>`, {
+                // Render Tags list for tooltip
+                let tagsList = [];
+                try {
+                    tagsList = JSON.parse(r.tags);
+                } catch(e) {
+                    tagsList = Array.isArray(r.tags) ? r.tags : [r.tags];
+                }
+                const tagsHtml = tagsList.slice(0, 2).map(t => `<span class="bg-slate-800/80 text-slate-300 px-1 py-0.5 rounded text-[8px] border border-white/5 font-semibold">#${t}</span>`).join(" ");
+
+                // Custom tooltip on hover with preview image and details
+                marker.bindTooltip(`
+                    <div class="flex flex-col gap-1.5 w-44 text-slate-200 pointer-events-none">
+                        <img src="${r.image_path}" class="w-full h-20 object-cover rounded-lg border border-white/10 bg-slate-950">
+                        <div class="flex justify-between items-center text-[9px] font-bold">
+                            <span class="font-mono text-slate-300">${r.id}</span>
+                            <span class="px-1 py-0.5 rounded text-[8px]" style="background-color: ${color}20; color: ${color}">${r.status}</span>
+                        </div>
+                        <div class="text-[10px] font-bold text-slate-100 truncate">${r.department}</div>
+                        <p class="text-[9px] text-slate-400 line-clamp-2 leading-tight">${r.description || 'No description'}</p>
+                        <div class="flex flex-wrap gap-1 mt-0.5">${tagsHtml}</div>
+                    </div>
+                `, {
                     direction: 'top',
                     offset: L.point(0, -6),
                     className: 'custom-tooltip'
@@ -511,12 +538,30 @@
                 footerActions.appendChild(resolveBtn);
             }
 
-            document.getElementById("detailModal").classList.remove("hidden");
+            const modal = document.getElementById("detailModal");
+            const modalContent = modal.querySelector(".glass-panel");
+            
+            modal.classList.remove("opacity-0", "pointer-events-none");
+            modal.classList.add("opacity-100", "pointer-events-auto");
+            
+            setTimeout(() => {
+                modalContent.classList.remove("scale-95", "translate-y-4", "opacity-0");
+                modalContent.classList.add("scale-100", "translate-y-0", "opacity-100");
+            }, 10);
         };
 
-        function closeDetailModal() {
-            document.getElementById("detailModal").classList.add("hidden");
-        }
+        window.closeDetailModal = function() {
+            const modal = document.getElementById("detailModal");
+            const modalContent = modal.querySelector(".glass-panel");
+            
+            modalContent.classList.remove("scale-100", "translate-y-0", "opacity-100");
+            modalContent.classList.add("scale-95", "translate-y-4", "opacity-0");
+            
+            setTimeout(() => {
+                modal.classList.remove("opacity-100", "pointer-events-auto");
+                modal.classList.add("opacity-0", "pointer-events-none");
+            }, 300);
+        };
 
         async function triggerResolveUpload(reportId) {
             const input = document.createElement("input");
