@@ -1,13 +1,27 @@
-import os
-import json
-import google.generativeai as genai
-from PIL import Image
-import io
+# Two-Stage AI Reporting Pipeline Implementation Plan
 
-API_KEY = os.environ.get("GOOGLE_API_KEY")
-if API_KEY:
-    genai.configure(api_key=API_KEY)
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Goal:** Implement a decoupled two-stage AI pipeline for civic hazard analysis (Vision-to-Text-to-Structured-JSON) using Gemini 2.5 Flash to achieve high visual accuracy and structured metadata classification.
+
+**Architecture:** Decouple physical observation from categorical reasoning. Stage 1 takes the raw image bytes and uses Gemini 2.5 Flash as a Vision model to produce a concise physical description containing raw scale, depth, and material details. Stage 2 feeds this description to a Gemini 2.5 Flash text invocation to synthesize tags, map departments, estimate safety priorities, and output a clean, parsed JSON object.
+
+**Tech Stack:** Python 3, google-generativeai / google-genai, Pillow (PIL), FastAPI TestClient, unittest.
+
+---
+
+### Task 1: Refactor `gemini_service.py` to Decouple the AI Analysis
+
+**Files:**
+- Modify: `gemini_service.py:11-48`
+
+- [ ] **Step 1: Replace `analyze_report_image` with the two-stage pipeline**
+
+Update `/home/integrity/Desktop/agent/civicfix/gemini_service.py` to define two distinct stages:
+1. **Stage 1 (Vision)**: Generates a concise physical observation string from the image.
+2. **Stage 2 (Text)**: Formulates the final JSON structure from the visual observation string.
+
+```python
 def analyze_report_image(image_bytes: bytes) -> dict:
     """
     Sends before image to Gemini Vision to describe the hazard details (Stage 1),
@@ -89,30 +103,42 @@ def analyze_report_image(image_bytes: bytes) -> dict:
             "priority": 1,
             "analysis": f"Failed to process two-stage AI diagnostics: {str(e)}"
         }
+```
 
-def verify_resolution(before_bytes: bytes, after_bytes: bytes) -> dict:
-    """
-    Sends before and after images side-by-side to Gemini Vision to verify if the issue was resolved.
-    """
-    if not API_KEY:
-        return {"verified": True, "explanation": "Resolution automatically verified (mock fallback)."}
-    
-    model = genai.GenerativeModel("gemini-2.5-flash")
-    before_img = Image.open(io.BytesIO(before_bytes))
-    after_img = Image.open(io.BytesIO(after_bytes))
-    
-    prompt = """
-    Compare these two images representing a civic issue before and after repair. 
-    Verify if the issue reported in the before image has been resolved in the after image.
-    You MUST return a valid JSON object matching this structure:
-    {
-      "verified": true | false,
-      "explanation": "Brief 1-sentence explanation of your decision."
-    }
-    """
-    response = model.generate_content([prompt, before_img, after_img])
-    try:
-        text = response.text.strip().replace("```json", "").replace("```", "").strip()
-        return json.loads(text)
-    except Exception as e:
-        return {"verified": False, "explanation": "Failed to process resolution verification."}
+---
+
+### Task 2: Validate Integration with Automated Tests
+
+**Files:**
+- Modify: `test_gemini.py`
+- Test: `test_multistage_flow.py`
+
+- [ ] **Step 1: Update `test_gemini.py` to verify the structure and check for API exceptions**
+
+```python
+import gemini_service
+
+def test_mock_fallback():
+    result = gemini_service.analyze_report_image(b"mock_bytes")
+    assert "tags" in result
+    assert "department" in result
+    assert "priority" in result
+    assert "analysis" in result
+    assert isinstance(result["tags"], list)
+    assert result["priority"] in [1, 2, 3, 4, 5]
+    print("Test passed: Gemini fallback behavior verified.")
+
+if __name__ == "__main__":
+    test_mock_fallback()
+```
+
+- [ ] **Step 2: Run both test suites to make sure everything passes**
+
+Run the following test files using the virtual environment python interpreter:
+```bash
+/home/integrity/Desktop/agent/venv/bin/python3 test_gemini.py
+/home/integrity/Desktop/agent/venv/bin/python3 test_multistage_flow.py
+```
+
+Expected output:
+Both tests should execute and complete successfully (Exit code: 0).
