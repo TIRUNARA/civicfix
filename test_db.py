@@ -34,5 +34,24 @@ def test_initialization():
     assert "draft_data" in qr_cols
     print("Test passed: Database initialized correctly and columns verified.")
 
+def test_sqlite_to_postgres_query():
+    # Simple replacement
+    q1 = "SELECT * FROM reports WHERE id = ?"
+    r1 = database.sqlite_to_postgres_query(q1)
+    assert r1 == "SELECT * FROM reports WHERE id = %s"
+
+    # Placeholders inside quotes should NOT be replaced
+    q2 = "SELECT * FROM reports WHERE id = ? AND description = 'Is this a pothole?'"
+    r2 = database.sqlite_to_postgres_query(q2)
+    assert r2 == "SELECT * FROM reports WHERE id = %s AND description = 'Is this a pothole?'"
+
+    # Double quotes inside SQL
+    q3 = 'SELECT * FROM reports WHERE id = ? AND tags = "pothole?"'
+    r3 = database.sqlite_to_postgres_query(q3)
+    assert r3 == 'SELECT * FROM reports WHERE id = %s AND tags = "pothole?"'
+    
+    print("Test passed: SQLite to Postgres query conversion tokenizer verified.")
+
 if __name__ == "__main__":
     test_initialization()
+    test_sqlite_to_postgres_query()

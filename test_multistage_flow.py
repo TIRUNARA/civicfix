@@ -2,6 +2,10 @@ from fastapi.testclient import TestClient
 import main
 import io
 import json
+import time
+
+import gemini_service
+gemini_service.client = None
 
 client = TestClient(main.app)
 
@@ -30,26 +34,56 @@ def test_multistage_workflow():
     )
     assert resp.status_code == 200
     upload_res = resp.json()
-    assert upload_res["status"] == "uploaded"
-    assert "associated_report_id" in upload_res
-    report_id = upload_res["associated_report_id"]
-    print(f"2. Image Uploaded via Mobile. Status transitioned to uploaded. Report ID: {report_id}")
+    assert upload_res["status"] == "processing"
+    print(f"2. Image Uploaded via Mobile. Status transitioned to processing.")
 
-    # 3. Simulate Desktop Polling status
+    # 3. Simulate Desktop Polling status until 'draft'
+    draft_data = None
+    for _ in range(20):
+        resp = client.get(f"/api/sessions/status/{token}")
+        assert resp.status_code == 200
+        status_data = resp.json()
+        if status_data["status"] == "draft":
+            draft_data = status_data["draft_data"]
+            break
+        time.sleep(0.2)
+
+    assert draft_data is not None
+    print(f"3. Desktop Polling verified status = draft. Draft data: {draft_data}")
+
+    # 4. Confirm/Submit Draft from Desktop
+    resp = client.post(
+        "/api/reports/submit",
+        data={
+            "token": token,
+            "latitude": draft_data["latitude"],
+            "longitude": draft_data["longitude"],
+            "image_path": draft_data["image_path"],
+            "tags": json.dumps(draft_data["tags"]),
+            "department": draft_data["department"],
+            "priority": draft_data["priority"],
+            "description": draft_data["analysis"]
+        }
+    )
+    assert resp.status_code == 200
+    submit_res = resp.json()
+    assert submit_res["status"] == "Pending"
+    report_id = submit_res["id"]
+    print(f"4. Confirmed draft. Created report ID: {report_id}")
+
+    # 5. Verify session status is updated to uploaded and linked to report_id
     resp = client.get(f"/api/sessions/status/{token}")
     assert resp.status_code == 200
-    status_data = resp.json()
-    assert status_data["status"] == "uploaded"
-    assert status_data["associated_report_id"] == report_id
-    print(f"3. Desktop Polling verified status = uploaded, report_id = {report_id}")
+    sess_status = resp.json()
+    assert sess_status["status"] == "uploaded"
+    assert sess_status["associated_report_id"] == report_id
 
-    # 4. Verify report has been created in the database and processed
+    # 6. Verify report status is Pending in the database
     resp = client.get(f"/api/reports/track/{report_id}")
     assert resp.status_code == 200
     report_data = resp.json()
-    print(f"4. Checked report state: {report_data['status']}")
-    # BackgroundTasks run synchronously in FastAPI TestClient, so it should be fully processed ('Reported')
-    assert report_data["status"] == "Reported"
+    assert report_data["status"] == "Pending"
+    print(f"5. Checked report state: {report_data['status']}")
     print(f"Integration test complete!")
 
 def test_multistage_workflow_with_user():
@@ -75,9 +109,46 @@ def test_multistage_workflow_with_user():
     )
     assert resp.status_code == 200
     upload_res = resp.json()
-    report_id = upload_res["associated_report_id"]
+    assert upload_res["status"] == "processing"
 
-    # 3. Check report metadata
+    # 3. Poll until draft
+    draft_data = None
+    for _ in range(20):
+        resp = client.get(f"/api/sessions/status/{token}")
+        assert resp.status_code == 200
+        status_data = resp.json()
+        if status_data["status"] == "draft":
+            draft_data = status_data["draft_data"]
+            break
+        time.sleep(0.2)
+
+    assert draft_data is not None
+    assert draft_data["reporter_email"] == "test-user@civicfix.org"
+    assert draft_data["reporter_name"] == "Test User"
+
+    # 4. Confirm/Submit Draft
+    resp = client.post(
+        "/api/reports/submit",
+        data={
+            "token": token,
+            "latitude": draft_data["latitude"],
+            "longitude": draft_data["longitude"],
+            "image_path": draft_data["image_path"],
+            "tags": json.dumps(draft_data["tags"]),
+            "department": draft_data["department"],
+            "priority": draft_data["priority"],
+            "description": draft_data["analysis"],
+            "reporter_email": draft_data["reporter_email"],
+            "reporter_name": draft_data["reporter_name"],
+            "reporter_avatar": draft_data["reporter_avatar"]
+        }
+    )
+    assert resp.status_code == 200
+    submit_res = resp.json()
+    assert submit_res["status"] == "Pending"
+    report_id = submit_res["id"]
+
+    # 5. Check report metadata
     resp = client.get(f"/api/reports/track/{report_id}")
     assert resp.status_code == 200
     report_data = resp.json()

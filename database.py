@@ -3,6 +3,33 @@ import os
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+def sqlite_to_postgres_query(query: str) -> str:
+    result = []
+    in_single_quote = False
+    in_double_quote = False
+    escape = False
+    i = 0
+    while i < len(query):
+        char = query[i]
+        if escape:
+            result.append(char)
+            escape = False
+        elif char == '\\':
+            result.append(char)
+            escape = True
+        elif char == "'" and not in_double_quote:
+            in_single_quote = not in_single_quote
+            result.append(char)
+        elif char == '"' and not in_single_quote:
+            in_double_quote = not in_double_quote
+            result.append(char)
+        elif char == '?' and not in_single_quote and not in_double_quote:
+            result.append('%s')
+        else:
+            result.append(char)
+        i += 1
+    return "".join(result)
+
 class CursorWrapper:
     def __init__(self, cursor, is_pg):
         self.cursor = cursor
@@ -10,12 +37,10 @@ class CursorWrapper:
 
     def execute(self, query, params=()):
         if self.is_pg:
-            # Convert SQLite placeholder ? to PostgreSQL placeholder %s
-            query = query.replace("?", "%s")
-            # Convert SQLite specific INSERT OR IGNORE to PostgreSQL ON CONFLICT DO NOTHING
+            query = sqlite_to_postgres_query(query)
             if "INSERT OR IGNORE" in query:
                 query = query.replace("INSERT OR IGNORE INTO leaderboard", "INSERT INTO leaderboard")
-                query += " ON CONFLICT (username) DO NOTHING"
+                query += " ON CONFLICT (email) DO NOTHING"
         self.cursor.execute(query, params)
 
     def fetchone(self):

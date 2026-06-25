@@ -10,6 +10,7 @@ import os
 from datetime import datetime
 import json
 from typing import List
+import aiofiles
 
 app = FastAPI(title="CivicFix Core")
 
@@ -71,7 +72,7 @@ def async_process_report_ai(report_id: str, final_db_paths: list, user_note: str
         
         cursor.execute("""
             UPDATE reports
-            SET tags = ?, department = ?, priority = ?, description = ?, status = 'Reported', updated_at = ?
+            SET tags = ?, department = ?, priority = ?, description = ?, status = 'Pending', updated_at = ?
             WHERE id = ?
         """, (
             json.dumps(tags_list),
@@ -143,8 +144,8 @@ async def submit_report(
             filename = f"{report_id}_before_{idx}.jpg"
             filepath = os.path.join("/tmp/uploads", filename)
             contents = await img_file.read()
-            with open(filepath, "wb") as f:
-                f.write(contents)
+            async with aiofiles.open(filepath, "wb") as f:
+                await f.write(contents)
             final_db_paths.append(f"/uploads/{filename}")
             
     elif image_path:
@@ -156,19 +157,25 @@ async def submit_report(
         except Exception:
             paths = [image_path]
             
+        base_dir = os.path.realpath("/tmp/uploads")
         for idx, path in enumerate(paths):
-            local_path = path
-            if path.startswith("/uploads/"):
-                local_path = path.replace("/uploads/", "/tmp/uploads/", 1)
-            if not os.path.abspath(local_path).startswith("/tmp/uploads/"):
-                raise HTTPException(status_code=400, detail="Invalid image path")
-            if not os.path.exists(local_path):
+            local_path = path.replace("/uploads/", "/tmp/uploads/", 1) if path.startswith("/uploads/") else path
+            try:
+                resolved_path = os.path.realpath(local_path)
+                if not (resolved_path == base_dir or resolved_path.startswith(base_dir + os.sep)):
+                    raise HTTPException(status_code=400, detail="Access denied")
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid path structure")
+                
+            if not os.path.exists(resolved_path):
                 raise HTTPException(status_code=404, detail=f"Draft image not found: {path}")
                 
             filename = f"{report_id}_before_{idx}.jpg"
             filepath = os.path.join("/tmp/uploads", filename)
-            with open(local_path, "rb") as src, open(filepath, "wb") as dst:
-                dst.write(src.read())
+            async with aiofiles.open(resolved_path, "rb") as src:
+                src_contents = await src.read()
+            async with aiofiles.open(filepath, "wb") as dst:
+                await dst.write(src_contents)
             final_db_paths.append(f"/uploads/{filename}")
     else:
         raise HTTPException(status_code=400, detail="No images provided")
@@ -209,7 +216,7 @@ async def submit_report(
         priority_return = initial_priority
     else:
         # Synchronous path (e.g. from existing test suites or direct manual submission)
-        status = "Reported"
+        status = "Pending"
         try:
             tags_list = json.loads(tags)
         except Exception:
@@ -371,24 +378,66 @@ async def get_session_status(token: str):
         res["draft_data"] = json.loads(res["draft_data"])
     return res
 
+def async_process_draft_ai(token: str, final_db_paths: list, latitude: float, longitude: float, reporter_email: str, reporter_name: str, reporter_avatar: str):
+    images_bytes = []
+    for path in final_db_paths:
+        local_path = path.replace("/uploads/", "/tmp/uploads/", 1) if path.startswith("/uploads/") else path
+        if os.path.exists(local_path):
+            try:
+                with open(local_path, "rb") as f:
+                    images_bytes.append(f.read())
+            except Exception as e:
+                print(f"Failed to read image {local_path}: {e}")
+                
+    try:
+        ai_data = gemini_service.analyze_report_images(images_bytes)
+        
+        draft_meta = {
+            "image_path": json.dumps(final_db_paths),
+            "latitude": latitude,
+            "longitude": longitude,
+            "tags": ai_data.get("tags", ["Pothole"]),
+            "department": ai_data.get("department", "Roads & Traffic"),
+            "priority": ai_data.get("priority", 3),
+            "analysis": ai_data.get("analysis", "AI classified this draft report."),
+            "reporter_email": reporter_email,
+            "reporter_name": reporter_name,
+            "reporter_avatar": reporter_avatar
+        }
+        
+        conn = database.get_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE qr_sessions SET status = 'draft', draft_data = ? WHERE token = ?",
+            (json.dumps(draft_meta), token)
+        )
+        conn.commit()
+        conn.close()
+        print(f"Draft session {token} processed by AI and set to draft.")
+    except Exception as e:
+        print(f"Error in background AI analysis for draft session {token}: {e}")
+
 @app.post("/api/sessions/upload/{token}")
 async def upload_session_photo(
     token: str,
     background_tasks: BackgroundTasks,
     images: List[UploadFile] = File(None),
-    image: UploadFile = File(None), # Single image fallback
+    image: UploadFile = File(None),
     latitude: float = Form(...),
-    longitude: float = Form(...),
-    user_note: str = Form(None)
+    longitude: float = Form(...)
 ):
     conn = database.get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT status FROM qr_sessions WHERE token = ?", (token,))
+    cursor.execute("SELECT status, draft_data FROM qr_sessions WHERE token = ?", (token,))
     row = cursor.fetchone()
     if not row:
         conn.close()
         raise HTTPException(status_code=404, detail="Session not found")
         
+    # Update status to processing
+    cursor.execute("UPDATE qr_sessions SET status = 'processing' WHERE token = ?", (token,))
+    conn.commit()
+    
     # Gather uploaded files
     uploaded_files = []
     if images:
@@ -403,36 +452,23 @@ async def upload_session_photo(
     report_id = f"CF-{uuid.uuid4().hex[:6].upper()}"
     final_db_paths = []
     
-    # Save files to /tmp/uploads
+    # Save files using aiofiles
     for idx, file in enumerate(uploaded_files):
         contents = await file.read()
         filename = f"{report_id}_before_{idx}.jpg"
         filepath = os.path.join("/tmp/uploads", filename)
-        with open(filepath, "wb") as f:
-            f.write(contents)
+        async with aiofiles.open(filepath, "wb") as f:
+            await f.write(contents)
         final_db_paths.append(f"/uploads/{filename}")
         
-    db_image_path_str = json.dumps(final_db_paths)
-    now_str = datetime.utcnow().isoformat()
-    
-    # Insert report in "Processing" state
-    status = "Processing"
-    initial_tags = ["Processing"]
-    initial_dept = "Processing"
-    initial_priority = 1
-    initial_desc = "AI is currently analyzing the uploaded image(s) and classifying the hazard..."
-    
-    # Retrieve QR Session to check if there is reporter info linked in draft_data
-    cursor.execute("SELECT draft_data FROM qr_sessions WHERE token = ?", (token,))
-    sess_row = cursor.fetchone()
-    
+    # Determine reporter settings from draft_data
     reporter_email = "anonymous@civicfix.org"
     reporter_name = "Anonymous"
     reporter_avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=anonymous"
     
-    if sess_row and sess_row["draft_data"]:
+    if row["draft_data"]:
         try:
-            meta = json.loads(sess_row["draft_data"])
+            meta = json.loads(row["draft_data"])
             if meta.get("reporter_email"):
                 reporter_email = meta["reporter_email"]
             if meta.get("reporter_name"):
@@ -442,45 +478,16 @@ async def upload_session_photo(
         except Exception:
             pass
             
-    cursor.execute("""
-    INSERT INTO reports (
-        id, latitude, longitude, image_path, tags, department, priority, 
-        votes, status, created_at, updated_at, reporter_email, reporter_name, description
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        report_id, latitude, longitude, db_image_path_str, json.dumps(initial_tags), 
-        initial_dept, initial_priority, 1, status, now_str, now_str, 
-        reporter_email, reporter_name, initial_desc
-    ))
-    
-    # Update QR Session to uploaded
-    cursor.execute(
-        "UPDATE qr_sessions SET status = 'uploaded', associated_report_id = ? WHERE token = ?",
-        (report_id, token)
-    )
-    
-    # Upsert leaderboard info
-    cursor.execute("SELECT civic_points, reports_submitted FROM leaderboard WHERE email = ?", (reporter_email,))
-    lead_row = cursor.fetchone()
-    if lead_row:
-        new_pts = lead_row["civic_points"] + 10
-        new_subs = lead_row["reports_submitted"] + 1
-        cursor.execute("UPDATE leaderboard SET civic_points = ?, reports_submitted = ?, username = ?, avatar_url = ? WHERE email = ?", (
-            new_pts, new_subs, reporter_name, reporter_avatar, reporter_email
-        ))
-    else:
-        cursor.execute("""
-        INSERT INTO leaderboard (email, username, avatar_url, civic_points, reports_submitted)
-        VALUES (?, ?, ?, 10, 1)
-        """, (reporter_email, reporter_name, reporter_avatar))
-        
-    conn.commit()
     conn.close()
     
-    # Enqueue background processing task
-    background_tasks.add_task(async_process_report_ai, report_id, final_db_paths, user_note, latitude, longitude)
+    # Enqueue background task to perform diagnostics and set session to draft
+    background_tasks.add_task(
+        async_process_draft_ai, 
+        token, final_db_paths, latitude, longitude, 
+        reporter_email, reporter_name, reporter_avatar
+    )
     
-    return {"status": "uploaded", "associated_report_id": report_id}
+    return {"status": "processing"}
 
 @app.post("/api/reports/resolve/{id}")
 async def resolve_report(id: str, resolved_image: UploadFile = File(...)):
@@ -492,20 +499,38 @@ async def resolve_report(id: str, resolved_image: UploadFile = File(...)):
         conn.close()
         raise HTTPException(status_code=404, detail="Report not found")
     
-    before_filepath = row["image_path"]
+    before_filepath_raw = row["image_path"]
+    try:
+        paths = json.loads(before_filepath_raw)
+        if isinstance(paths, list) and len(paths) > 0:
+            before_filepath = paths[0]
+        else:
+            before_filepath = before_filepath_raw
+    except Exception:
+        before_filepath = before_filepath_raw
+
     if before_filepath.startswith("/uploads/"):
         before_filepath = before_filepath.replace("/uploads/", "/tmp/uploads/", 1)
+        
+    # Secure path traversal check
+    base_dir = os.path.realpath("/tmp/uploads")
+    try:
+        resolved_before = os.path.realpath(before_filepath)
+        if not (resolved_before == base_dir or resolved_before.startswith(base_dir + os.sep)):
+            raise HTTPException(status_code=400, detail="Access denied")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid path structure")
         
     # Save resolved image
     after_contents = await resolved_image.read()
     resolved_filename = f"{id}_after.jpg"
     after_filepath = os.path.join("/tmp/uploads", resolved_filename)
-    with open(after_filepath, "wb") as f:
-        f.write(after_contents)
+    async with aiofiles.open(after_filepath, "wb") as f:
+        await f.write(after_contents)
         
     # Read before image bytes
-    with open(before_filepath, "rb") as f:
-        before_contents = f.read()
+    async with aiofiles.open(resolved_before, "rb") as f:
+        before_contents = await f.read()
         
     # Verify resolution using Gemini Vision
     verify_data = gemini_service.verify_resolution(before_contents, after_contents)
@@ -530,23 +555,28 @@ from fastapi.staticfiles import StaticFiles
 app.mount("/tmp/uploads", StaticFiles(directory="/tmp/uploads"), name="uploads_tmp")
 app.mount("/uploads", StaticFiles(directory="/tmp/uploads"), name="uploads")
 
+TEMPLATES = {}
+for name in ["dashboard.html", "map.html", "report.html", "leaderboard.html"]:
+    path = os.path.join("templates", name)
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            TEMPLATES[name] = f.read()
+    else:
+        TEMPLATES[name] = f"Template {name} not found"
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard():
-    with open("templates/dashboard.html", "r") as f:
-        return HTMLResponse(content=f.read())
+    return HTMLResponse(content=TEMPLATES.get("dashboard.html", ""))
 
 @app.get("/map", response_class=HTMLResponse)
 async def serve_map():
-    with open("templates/map.html", "r") as f:
-        return HTMLResponse(content=f.read())
+    return HTMLResponse(content=TEMPLATES.get("map.html", ""))
 
 @app.get("/report", response_class=HTMLResponse)
 async def serve_report():
-    with open("templates/report.html", "r") as f:
-        return HTMLResponse(content=f.read())
+    return HTMLResponse(content=TEMPLATES.get("report.html", ""))
 
 @app.get("/leaderboard", response_class=HTMLResponse)
 async def serve_leaderboard():
-    with open("templates/leaderboard.html", "r") as f:
-        return HTMLResponse(content=f.read())
+    return HTMLResponse(content=TEMPLATES.get("leaderboard.html", ""))
 
