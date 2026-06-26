@@ -90,8 +90,11 @@
 
             <!-- Authentication Widget -->
             <div id="auth-panel" class="flex items-center space-x-2">
-                <button onclick="triggerMockLogin()" class="px-3.5 py-2 bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 text-emerald-400 hover:from-emerald-500/20 hover:to-cyan-500/20 font-bold rounded-xl text-xs transition-all shadow-md">
-                    🔑 Mock Login (Demo)
+                <button onclick="triggerMockLogin('citizen')" class="px-2 py-2 bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 text-emerald-400 hover:from-emerald-500/20 hover:to-cyan-500/20 font-bold rounded-xl text-[10px] transition-all shadow-md">
+                    🔑 Citizen Demo
+                </button>
+                <button onclick="triggerMockLogin('officer')" class="px-2 py-2 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-500/20 text-blue-400 hover:from-blue-500/20 hover:to-indigo-500/20 font-bold rounded-xl text-[10px] transition-all shadow-md">
+                    👮 Officer Demo
                 </button>
                 <div id="g-login-btn"></div>
             </div>
@@ -464,6 +467,15 @@
             container.appendChild(wrapper);
         }
 
+        function getRoleFromEmail(email) {
+            if (!email) return 'citizen';
+            const lower = email.toLowerCase();
+            if (lower.endsWith('.gov') || lower.endsWith('city.gov') || lower.endsWith('civicfix.org') || lower.includes('officer') || lower === 'shiva@civicfix.org' || lower === 'officer@gmail.com') {
+                return 'officer';
+            }
+            return 'citizen';
+        }
+
         // Initialize Web GIS
         window.onload = function () {
             initMap();
@@ -487,6 +499,8 @@
             if (cachedUser) {
                 currentUser = JSON.parse(cachedUser);
                 updateUIForLoggedInUser();
+            } else {
+                document.getElementById("roleToggle").classList.add("hidden");
             }
 
             // Mobile bridged camera auto-trigger
@@ -506,10 +520,13 @@
                 }).join(''));
                 
                 const payload = JSON.parse(jsonPayload);
+                const role = getRoleFromEmail(payload.email);
                 currentUser = {
                     email: payload.email,
                     name: payload.name,
-                    avatar: payload.picture
+                    avatar: payload.picture,
+                    role: role,
+                    activeRole: role
                 };
                 localStorage.setItem("user", JSON.stringify(currentUser));
                 updateUIForLoggedInUser();
@@ -518,11 +535,14 @@
             }
         }
 
-        function triggerMockLogin() {
+        function triggerMockLogin(role = 'citizen') {
+            const isOfficer = role === 'officer';
             currentUser = {
-                email: "shiva@civicfix.org",
-                name: "Shiva",
-                avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=shiva"
+                email: isOfficer ? "officer@civicfix.org" : "shiva@civicfix.org",
+                name: isOfficer ? "Officer Shiva" : "Shiva (Citizen)",
+                avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${isOfficer ? 'officershiva' : 'shiva'}`,
+                role: isOfficer ? 'officer' : 'citizen',
+                activeRole: isOfficer ? 'officer' : 'citizen'
             };
             localStorage.setItem("user", JSON.stringify(currentUser));
             updateUIForLoggedInUser();
@@ -533,11 +553,38 @@
             currentUser = null;
             document.getElementById("user-profile").classList.add("hidden");
             document.getElementById("auth-panel").classList.remove("hidden");
+            document.getElementById("roleToggle").classList.add("hidden");
+            document.getElementById("tab-officer").classList.add("hidden");
             loadMyReports();
             loadLeaderboard();
         }
 
         function updateUIForLoggedInUser() {
+            if (currentUser && !currentUser.role) {
+                currentUser.role = getRoleFromEmail(currentUser.email);
+                currentUser.activeRole = currentUser.role;
+                localStorage.setItem("user", JSON.stringify(currentUser));
+            }
+            if (currentUser && !currentUser.activeRole) {
+                currentUser.activeRole = currentUser.role;
+                localStorage.setItem("user", JSON.stringify(currentUser));
+            }
+
+            const roleToggle = document.getElementById("roleToggle");
+            if (currentUser.role === 'officer') {
+                roleToggle.classList.remove("hidden");
+                roleToggle.value = currentUser.activeRole;
+            } else {
+                roleToggle.classList.add("hidden");
+                roleToggle.value = "citizen";
+            }
+
+            if (roleToggle.value === 'citizen') {
+                document.getElementById("tab-officer").classList.add("hidden");
+            } else {
+                document.getElementById("tab-officer").classList.remove("hidden");
+            }
+
             document.getElementById("auth-panel").classList.add("hidden");
             const profile = document.getElementById("user-profile");
             profile.classList.remove("hidden");
@@ -1128,6 +1175,10 @@
 
         function toggleRole() {
             const role = document.getElementById("roleToggle").value;
+            if (currentUser) {
+                currentUser.activeRole = role;
+                localStorage.setItem("user", JSON.stringify(currentUser));
+            }
             switchTab('report');
             if (role === 'citizen') {
                 document.getElementById("tab-officer").classList.add("hidden");

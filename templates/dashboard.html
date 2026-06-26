@@ -123,9 +123,14 @@
                         <span class="flex-shrink mx-4 text-slate-500 text-xs uppercase tracking-wider font-semibold">Or</span>
                         <div class="flex-grow border-t border-white/5"></div>
                     </div>
-                    <button onclick="triggerMockLogin()" class="w-full py-3 bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 text-[#00E5B0] hover:from-emerald-500/20 hover:to-cyan-500/20 font-bold rounded-xl text-sm transition-all shadow-md active:scale-[0.98]">
-                        🔑 Instant Demo Sign In
-                    </button>
+                    <div class="flex flex-col gap-2 w-full">
+                        <button onclick="triggerMockLogin('citizen')" class="w-full py-2.5 bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 text-[#00E5B0] hover:from-emerald-500/20 hover:to-cyan-500/20 font-bold rounded-xl text-xs transition-all shadow-md active:scale-[0.98]">
+                            🔑 Instant Citizen Demo
+                        </button>
+                        <button onclick="triggerMockLogin('officer')" class="w-full py-2.5 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-500/20 text-blue-400 hover:from-blue-500/20 hover:to-indigo-500/20 font-bold rounded-xl text-xs transition-all shadow-md active:scale-[0.98]">
+                            👮 Instant Officer Demo
+                        </button>
+                    </div>
                 </div>
             </div>
         </section>
@@ -355,12 +360,40 @@
             container.appendChild(wrapper);
         }
 
+        function getRoleFromEmail(email) {
+            if (!email) return 'citizen';
+            const lower = email.toLowerCase();
+            if (lower.endsWith('.gov') || lower.endsWith('city.gov') || lower.endsWith('civicfix.org') || lower.includes('officer') || lower === 'shiva@civicfix.org' || lower === 'officer@gmail.com') {
+                return 'officer';
+            }
+            return 'citizen';
+        }
+
         window.onload = function() {
             renderHeaderAuth();
             initializeGoogleSignIn();
             loadGlobalStats();
             
             if (currentUser) {
+                if (!currentUser.role) {
+                    currentUser.role = getRoleFromEmail(currentUser.email);
+                    currentUser.activeRole = currentUser.role;
+                    localStorage.setItem("user", JSON.stringify(currentUser));
+                }
+                if (!currentUser.activeRole) {
+                    currentUser.activeRole = currentUser.role;
+                    localStorage.setItem("user", JSON.stringify(currentUser));
+                }
+                
+                const roleToggle = document.getElementById("roleToggle");
+                if (currentUser.role === 'officer') {
+                    roleToggle.classList.remove("hidden");
+                    roleToggle.value = currentUser.activeRole;
+                } else {
+                    roleToggle.classList.add("hidden");
+                    roleToggle.value = "citizen";
+                }
+
                 document.getElementById("landingView").classList.add("hidden");
                 document.getElementById("dashboardView").classList.remove("hidden");
                 document.getElementById("welcomeMsg").textContent = `Welcome back, ${currentUser.name}`;
@@ -368,6 +401,7 @@
             } else {
                 document.getElementById("landingView").classList.remove("hidden");
                 document.getElementById("dashboardView").classList.add("hidden");
+                document.getElementById("roleToggle").classList.add("hidden");
             }
         };
 
@@ -394,10 +428,13 @@
                 }).join(''));
                 
                 const payload = JSON.parse(jsonPayload);
+                const role = getRoleFromEmail(payload.email);
                 currentUser = {
                     email: payload.email,
                     name: payload.name,
-                    avatar: payload.picture
+                    avatar: payload.picture,
+                    role: role,
+                    activeRole: role
                 };
                 localStorage.setItem("user", JSON.stringify(currentUser));
                 showToast("✅ Successfully signed in with Google!", "success");
@@ -408,14 +445,17 @@
             }
         }
 
-        function triggerMockLogin() {
+        function triggerMockLogin(role = 'citizen') {
+            const isOfficer = role === 'officer';
             currentUser = {
-                email: "shiva@civicfix.org",
-                name: "Shiva",
-                avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=shiva"
+                email: isOfficer ? "officer@civicfix.org" : "shiva@civicfix.org",
+                name: isOfficer ? "Officer Shiva" : "Shiva (Citizen)",
+                avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${isOfficer ? 'officershiva' : 'shiva'}`,
+                role: isOfficer ? 'officer' : 'citizen',
+                activeRole: isOfficer ? 'officer' : 'citizen'
             };
             localStorage.setItem("user", JSON.stringify(currentUser));
-            showToast("🔑 Mock authentication session started!", "success");
+            showToast(`🔑 Mock ${role} authentication session started!`, "success");
             window.location.reload();
         }
 
@@ -743,9 +783,13 @@
         }
 
         function toggleRole() {
-            // Keep role preference preserved
             const role = document.getElementById("roleToggle").value;
+            if (currentUser) {
+                currentUser.activeRole = role;
+                localStorage.setItem("user", JSON.stringify(currentUser));
+            }
             showToast(`🔄 Role switched to: ${role === 'officer' ? 'Municipal Officer' : 'Citizen'}`, "info");
+            loadDashboardData();
         }
     </script>
 </body>

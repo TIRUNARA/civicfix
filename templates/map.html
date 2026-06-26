@@ -381,7 +381,38 @@
             'Processing': '#818cf8'
         };
 
+        function getRoleFromEmail(email) {
+            if (!email) return 'citizen';
+            const lower = email.toLowerCase();
+            if (lower.endsWith('.gov') || lower.endsWith('city.gov') || lower.endsWith('civicfix.org') || lower.includes('officer') || lower === 'shiva@civicfix.org' || lower === 'officer@gmail.com') {
+                return 'officer';
+            }
+            return 'citizen';
+        }
+
         window.onload = function() {
+            if (currentUser) {
+                if (!currentUser.role) {
+                    currentUser.role = getRoleFromEmail(currentUser.email);
+                    currentUser.activeRole = currentUser.role;
+                    localStorage.setItem("user", JSON.stringify(currentUser));
+                }
+                if (!currentUser.activeRole) {
+                    currentUser.activeRole = currentUser.role;
+                    localStorage.setItem("user", JSON.stringify(currentUser));
+                }
+                
+                const roleToggle = document.getElementById("roleToggle");
+                if (currentUser.role === 'officer') {
+                    roleToggle.classList.remove("hidden");
+                    roleToggle.value = currentUser.activeRole;
+                } else {
+                    roleToggle.classList.add("hidden");
+                    roleToggle.value = "citizen";
+                }
+            } else {
+                document.getElementById("roleToggle").classList.add("hidden");
+            }
             renderHeaderAuth();
             initMap();
             loadReportsData();
@@ -781,7 +812,12 @@
 
         function toggleRole() {
             const role = document.getElementById("roleToggle").value;
+            if (currentUser) {
+                currentUser.activeRole = role;
+                localStorage.setItem("user", JSON.stringify(currentUser));
+            }
             showToast(`🔄 Role switched to: ${role === 'officer' ? 'Municipal Officer' : 'Citizen'}`, "info");
+            loadReportsData();
         }
     </script>
 </body>
