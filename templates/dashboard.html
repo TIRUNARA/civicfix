@@ -178,19 +178,19 @@
             <!-- User Metrics bar -->
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div class="glass-card rounded-2xl p-5 flex flex-col">
-                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Reports Filed</span>
+                    <span id="filedLabel" class="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Reports Filed</span>
                     <span class="text-3xl font-extrabold text-white mt-1" id="userReportsFiled">0</span>
                 </div>
                 <div class="glass-card rounded-2xl p-5 flex flex-col">
-                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Verified Fixed</span>
+                    <span id="resolvedLabel" class="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Verified Fixed</span>
                     <span class="text-3xl font-extrabold text-white mt-1" id="userReportsResolved">0</span>
                 </div>
                 <div class="glass-card rounded-2xl p-5 flex flex-col">
-                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Earned Points</span>
+                    <span id="pointsLabel" class="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Earned Points</span>
                     <span class="text-3xl font-extrabold text-[#00E5B0] mt-1" id="userPoints">0</span>
                 </div>
                 <div class="glass-card rounded-2xl p-5 flex flex-col">
-                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Citizen Rank</span>
+                    <span id="rankLabel" class="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Citizen Rank</span>
                     <span class="text-3xl font-extrabold text-white mt-1" id="userRank">#--</span>
                 </div>
             </div>
@@ -198,7 +198,7 @@
             <!-- Uploads feed table -->
             <div class="glass-panel rounded-3xl border border-white/10 p-6 space-y-4">
                 <div class="flex items-center justify-between border-b border-white/5 pb-4">
-                    <h2 class="text-lg font-bold">My Filed Hazard Reports</h2>
+                    <h2 id="tableTitle" class="text-lg font-bold">My Filed Hazard Reports</h2>
                     <span class="text-slate-500 text-xs" id="reportsCountLabel">0 reports found</span>
                 </div>
                 
@@ -264,6 +264,14 @@
                     <div>
                         <span class="text-slate-500 font-semibold block uppercase">Date Filed</span>
                         <span class="text-slate-200" id="modalDate">...</span>
+                    </div>
+                    <div class="col-span-2 border-t border-white/5 pt-3 flex items-center gap-3">
+                        <img id="modalReporterAvatar" src="" class="w-8 h-8 rounded-full border border-white/10">
+                        <div>
+                            <span class="text-slate-500 font-semibold block uppercase text-[10px]">Reporter</span>
+                            <span class="text-slate-200 font-bold" id="modalReporterName">...</span>
+                            <span class="text-slate-400 text-[11px]" id="modalReporterEmail">...</span>
+                        </div>
                     </div>
                 </div>
 
@@ -578,7 +586,9 @@
                 dashboardPollingInterval = setInterval(async () => {
                     const email = currentUser.email;
                     try {
-                        const rResp = await fetch(`/api/reports/my-reports/${email}`);
+                        const isOfficer = currentUser.activeRole === 'officer';
+                        const url = isOfficer ? "/api/reports/list" : `/api/reports/my-reports/${email}`;
+                        const rResp = await fetch(url);
                         const reports = await rResp.json();
                         activeReports = reports;
                         
@@ -620,7 +630,9 @@
         async function loadDashboardData() {
             try {
                 const email = currentUser.email;
-                const rResp = await fetch(`/api/reports/my-reports/${email}`);
+                const isOfficer = currentUser && currentUser.activeRole === 'officer';
+                const url = isOfficer ? "/api/reports/list" : `/api/reports/my-reports/${email}`;
+                const rResp = await fetch(url);
                 const reports = await rResp.json();
                 activeReports = reports;
 
@@ -629,6 +641,18 @@
                 const resolved = reports.filter(r => r.status === 'Resolved').length;
                 document.getElementById("userReportsFiled").textContent = filed;
                 document.getElementById("userReportsResolved").textContent = resolved;
+
+                if (isOfficer) {
+                    document.getElementById("welcomeMsg").textContent = `Welcome, Municipal Officer`;
+                    document.getElementById("tableTitle").textContent = "All Municipal Reports";
+                    document.getElementById("filedLabel").textContent = "Total System Reports";
+                    document.getElementById("resolvedLabel").textContent = "Total Resolved Hazards";
+                } else {
+                    document.getElementById("welcomeMsg").textContent = `Welcome, Citizen`;
+                    document.getElementById("tableTitle").textContent = "My Filed Hazard Reports";
+                    document.getElementById("filedLabel").textContent = "Reports Filed";
+                    document.getElementById("resolvedLabel").textContent = "Verified Fixed";
+                }
 
                 // Load points and rank from leaderboard
                 const lResp = await fetch("/api/leaderboard");
@@ -639,7 +663,7 @@
                     document.getElementById("userPoints").textContent = leaders[myRankIdx].civic_points;
                     document.getElementById("userRank").textContent = `#${myRankIdx + 1}`;
                 } else {
-                    document.getElementById("userPoints").textContent = filed * 10 + resolved * 50;
+                    document.getElementById("userPoints").textContent = (isOfficer ? 0 : filed * 10 + resolved * 50);
                     document.getElementById("userRank").textContent = `#--`;
                 }
 
@@ -721,6 +745,11 @@
             document.getElementById("modalPriority").textContent = `Lvl ${r.priority}`;
             document.getElementById("modalDate").textContent = new Date(r.created_at).toLocaleString();
             document.getElementById("modalDesc").textContent = r.description || "No description provided.";
+            
+            // Populate reporter details
+            document.getElementById("modalReporterAvatar").src = r.reporter_avatar || 'https://api.dicebear.com/7.x/bottts/svg?seed=anonymous';
+            document.getElementById("modalReporterName").textContent = r.reporter_name || 'Anonymous';
+            document.getElementById("modalReporterEmail").textContent = r.reporter_email || 'anonymous@civicfix.org';
             
             // Render Status badge
             const statusLabel = document.getElementById("modalStatus");
