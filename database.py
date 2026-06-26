@@ -153,11 +153,33 @@ def init_db():
             pass
     
     # We drop the old leaderboard table if it doesn't have the new layout
-    try:
-        # Check if new columns exist
-        cursor.execute("SELECT email FROM leaderboard LIMIT 1")
-    except Exception:
-        # Table doesn't exist or is old format, recreate it
+    table_ok = False
+    if conn.is_pg:
+        try:
+            # Query the catalog to see if leaderboard table and email column exist
+            cursor.cursor.execute("""
+                SELECT EXISTS (
+                    SELECT 1 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'leaderboard' AND column_name = 'email'
+                )
+            """)
+            row = cursor.cursor.fetchone()
+            table_ok = row[0] if row else False
+        except Exception:
+            table_ok = False
+            try:
+                conn.conn.rollback()
+            except Exception:
+                pass
+    else:
+        try:
+            cursor.execute("SELECT email FROM leaderboard LIMIT 1")
+            table_ok = True
+        except Exception:
+            table_ok = False
+
+    if not table_ok:
         cursor.execute("DROP TABLE IF EXISTS leaderboard")
         
     cursor.execute("""
