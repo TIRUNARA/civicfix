@@ -3,8 +3,9 @@ import os
 
 def test_initialization():
     # Force fresh init
-    if os.path.exists("/tmp/civicfix.db"):
-        os.remove("/tmp/civicfix.db")
+    db_path = os.environ.get("DB_PATH", os.path.join(os.path.dirname(database.__file__), "civicfix.db"))
+    if os.path.exists(db_path):
+        os.remove(db_path)
     database.init_db()
     
     conn = database.get_db()

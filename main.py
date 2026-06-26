@@ -24,7 +24,8 @@ app.add_middleware(
 )
 
 # Ensure folders exist
-os.makedirs("/tmp/uploads", exist_ok=True)
+UPLOAD_DIR = os.environ.get("UPLOAD_DIR", os.path.join(os.path.dirname(__file__), "uploads"))
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 database.init_db()
 
 # Haversine distance formula (in km)
@@ -39,7 +40,7 @@ def get_distance(lat1, lon1, lat2, lon2):
 def async_process_report_ai(report_id: str, final_db_paths: list, user_note: str, latitude: float, longitude: float):
     images_bytes = []
     for path in final_db_paths:
-        local_path = path.replace("/uploads/", "/tmp/uploads/", 1)
+        local_path = path.replace("/uploads/", f"{UPLOAD_DIR}/", 1)
         if os.path.exists(local_path):
             try:
                 with open(local_path, "rb") as f:
@@ -142,7 +143,7 @@ async def submit_report(
     if uploaded_files:
         for idx, img_file in enumerate(uploaded_files):
             filename = f"{report_id}_before_{idx}.jpg"
-            filepath = os.path.join("/tmp/uploads", filename)
+            filepath = os.path.join(UPLOAD_DIR, filename)
             contents = await img_file.read()
             async with aiofiles.open(filepath, "wb") as f:
                 await f.write(contents)
@@ -157,9 +158,9 @@ async def submit_report(
         except Exception:
             paths = [image_path]
             
-        base_dir = os.path.realpath("/tmp/uploads")
+        base_dir = os.path.realpath(UPLOAD_DIR)
         for idx, path in enumerate(paths):
-            local_path = path.replace("/uploads/", "/tmp/uploads/", 1) if path.startswith("/uploads/") else path
+            local_path = path.replace("/uploads/", f"{UPLOAD_DIR}/", 1) if path.startswith("/uploads/") else path
             try:
                 resolved_path = os.path.realpath(local_path)
                 if not (resolved_path == base_dir or resolved_path.startswith(base_dir + os.sep)):
@@ -171,7 +172,7 @@ async def submit_report(
                 raise HTTPException(status_code=404, detail=f"Draft image not found: {path}")
                 
             filename = f"{report_id}_before_{idx}.jpg"
-            filepath = os.path.join("/tmp/uploads", filename)
+            filepath = os.path.join(UPLOAD_DIR, filename)
             async with aiofiles.open(resolved_path, "rb") as src:
                 src_contents = await src.read()
             async with aiofiles.open(filepath, "wb") as dst:
@@ -381,7 +382,7 @@ async def get_session_status(token: str):
 def async_process_draft_ai(token: str, final_db_paths: list, latitude: float, longitude: float, reporter_email: str, reporter_name: str, reporter_avatar: str):
     images_bytes = []
     for path in final_db_paths:
-        local_path = path.replace("/uploads/", "/tmp/uploads/", 1) if path.startswith("/uploads/") else path
+        local_path = path.replace("/uploads/", f"{UPLOAD_DIR}/", 1) if path.startswith("/uploads/") else path
         if os.path.exists(local_path):
             try:
                 with open(local_path, "rb") as f:
@@ -456,7 +457,7 @@ async def upload_session_photo(
     for idx, file in enumerate(uploaded_files):
         contents = await file.read()
         filename = f"{report_id}_before_{idx}.jpg"
-        filepath = os.path.join("/tmp/uploads", filename)
+        filepath = os.path.join(UPLOAD_DIR, filename)
         async with aiofiles.open(filepath, "wb") as f:
             await f.write(contents)
         final_db_paths.append(f"/uploads/{filename}")
@@ -510,10 +511,10 @@ async def resolve_report(id: str, resolved_image: UploadFile = File(...)):
         before_filepath = before_filepath_raw
 
     if before_filepath.startswith("/uploads/"):
-        before_filepath = before_filepath.replace("/uploads/", "/tmp/uploads/", 1)
+        before_filepath = before_filepath.replace("/uploads/", f"{UPLOAD_DIR}/", 1)
         
     # Secure path traversal check
-    base_dir = os.path.realpath("/tmp/uploads")
+    base_dir = os.path.realpath(UPLOAD_DIR)
     try:
         resolved_before = os.path.realpath(before_filepath)
         if not (resolved_before == base_dir or resolved_before.startswith(base_dir + os.sep)):
@@ -524,7 +525,7 @@ async def resolve_report(id: str, resolved_image: UploadFile = File(...)):
     # Save resolved image
     after_contents = await resolved_image.read()
     resolved_filename = f"{id}_after.jpg"
-    after_filepath = os.path.join("/tmp/uploads", resolved_filename)
+    after_filepath = os.path.join(UPLOAD_DIR, resolved_filename)
     async with aiofiles.open(after_filepath, "wb") as f:
         await f.write(after_contents)
         
@@ -552,8 +553,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 # Expose uploaded images
-app.mount("/tmp/uploads", StaticFiles(directory="/tmp/uploads"), name="uploads_tmp")
-app.mount("/uploads", StaticFiles(directory="/tmp/uploads"), name="uploads")
+app.mount("/tmp/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads_tmp")
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 TEMPLATES = {}
 for name in ["dashboard.html", "map.html", "report.html", "leaderboard.html"]:

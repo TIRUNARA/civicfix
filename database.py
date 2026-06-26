@@ -86,7 +86,7 @@ def get_db():
         conn = psycopg2.connect(DATABASE_URL)
         return ConnectionWrapper(conn, is_pg=True)
     else:
-        db_path = os.environ.get("DB_PATH", "/tmp/civicfix.db")
+        db_path = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "civicfix.db"))
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         return ConnectionWrapper(conn, is_pg=False)
