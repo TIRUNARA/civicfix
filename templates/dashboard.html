@@ -51,6 +51,19 @@
             outline: none;
             ring: 2px solid #00E5B0;
         }
+        @keyframes scanline {
+            0% { transform: translateY(-100%); opacity: 0; }
+            10% { opacity: 0.8; }
+            90% { opacity: 0.8; }
+            100% { transform: translateY(100%); opacity: 0; }
+        }
+        .scanner-laser {
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, transparent, #00E5B0, transparent);
+            box-shadow: 0 0 8px #00E5B0;
+            animation: scanline 2.5s linear infinite;
+        }
     </style>
 </head>
 <body class="flex flex-col min-h-screen">

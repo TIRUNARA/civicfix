@@ -67,8 +67,18 @@
             border: none !important;
             box-shadow: none !important;
         }
-        .leaflet-tooltip-top:before {
-            border-top-color: transparent !important;
+        @keyframes scanline {
+            0% { transform: translateY(-100%); opacity: 0; }
+            10% { opacity: 0.8; }
+            90% { opacity: 0.8; }
+            100% { transform: translateY(100%); opacity: 0; }
+        }
+        .scanner-laser {
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, transparent, #00FFC2, transparent);
+            box-shadow: 0 0 8px #00FFC2;
+            animation: scanline 2.5s linear infinite;
         }
     </style>
 </head>
@@ -339,14 +349,32 @@
     </div>
 
     <!-- AI Diagnostic Loader -->
-    <div id="loadingModal" class="fixed inset-0 bg-black/80 z-[70] flex flex-col items-center justify-center hidden">
-        <div class="flex flex-col items-center space-y-4">
-            <div class="relative w-14 h-14">
-                <div class="absolute inset-0 rounded-full border-4 border-slate-800"></div>
-                <div class="absolute inset-0 rounded-full border-4 border-t-[#00FFC2] animate-spin"></div>
+    <div id="loadingModal" class="fixed inset-0 bg-black/90 z-[70] flex flex-col items-center justify-center hidden backdrop-blur-md">
+        <div class="flex flex-col items-center space-y-6 max-w-sm w-full p-6">
+            <div id="loaderPreviewContainer" class="relative w-64 h-64 border border-[#00FFC2]/20 rounded-2xl overflow-hidden bg-slate-950 flex items-center justify-center hidden">
+                <img id="loaderPreviewImg" src="" class="w-full h-full object-cover opacity-60">
+                <div class="scanner-laser"></div>
+                <!-- Scanning UI overlay -->
+                <div class="absolute inset-0 flex flex-col justify-between p-3 pointer-events-none font-mono text-[9px] text-[#00FFC2]/70">
+                    <div class="flex justify-between">
+                        <span>[ SCANNING_IMG ]</span>
+                        <span>SYS_OK</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span id="scanCoords">LOC: 12.9716, 77.5946</span>
+                        <span>V2C_ENG_v1.0</span>
+                    </div>
+                </div>
             </div>
-            <p class="text-[#00FFC2] font-semibold text-sm tracking-wide">AI Running Diagnostics...</p>
-            <p class="text-3xs text-slate-400 uppercase tracking-wider">Classifying tags and prioritizing issue severity...</p>
+            
+            <div class="flex flex-col items-center space-y-2 text-center">
+                <div class="relative w-12 h-12 mb-2">
+                    <div class="absolute inset-0 rounded-full border-4 border-slate-800"></div>
+                    <div class="absolute inset-0 rounded-full border-4 border-t-[#00FFC2] animate-spin"></div>
+                </div>
+                <p class="text-[#00FFC2] font-semibold text-sm tracking-wide">AI Running Diagnostics...</p>
+                <p class="text-xs text-slate-400">Classifying tags and prioritizing issue severity...</p>
+            </div>
         </div>
     </div>
 
@@ -875,9 +903,28 @@
                 const resp = await fetch("/api/sessions/status/" + token);
                 const data = await resp.json();
                 
-                // If draft data is loaded from mobile, open AI preview wizard
-                if (data.status === 'draft' && data.draft_data) {
+                if (data.status === 'processing') {
+                    if (data.draft_data && data.draft_data.image_path) {
+                        let imgUrl = "";
+                        try {
+                            const paths = JSON.parse(data.draft_data.image_path);
+                            if (paths && paths.length > 0) {
+                                imgUrl = paths[0];
+                            }
+                        } catch (e) {
+                            imgUrl = data.draft_data.image_path;
+                        }
+                        if (imgUrl) {
+                            showLoader(true, imgUrl, data.draft_data.latitude, data.draft_data.longitude);
+                        } else {
+                            showLoader(true);
+                        }
+                    } else {
+                        showLoader(true);
+                    }
+                } else if (data.status === 'draft' && data.draft_data) {
                     clearInterval(pollingInterval);
+                    showLoader(false);
                     closeModal();
                     
                     // Open AI wizard with draft details
@@ -890,6 +937,7 @@
                     openWizard(draft.image_path, draft.latitude, draft.longitude, draft.tags, draft.department, draft.priority, draft.analysis);
                 } else if (data.status === 'uploaded') {
                     clearInterval(pollingInterval);
+                    showLoader(false);
                     closeModal();
                     loadReports();
                     loadLeaderboard();
@@ -941,7 +989,7 @@
             const center = map.getCenter();
             const submitWithCoords = (latitude, longitude) => {
                 closeModal();
-                showLoader(true);
+                showLoader(true, files[0], latitude, longitude);
                 
                 const formData = new FormData();
                 files.forEach(f => {
@@ -1092,10 +1140,36 @@
             wizardImagePath = null;
         }
 
-        function showLoader(show) {
+        function showLoader(show, fileOrUrl = null, latitude = null, longitude = null) {
             const loader = document.getElementById("loadingModal");
-            if (show) loader.classList.remove("hidden");
-            else loader.classList.add("hidden");
+            const previewContainer = document.getElementById("loaderPreviewContainer");
+            const previewImg = document.getElementById("loaderPreviewImg");
+            const scanCoords = document.getElementById("scanCoords");
+
+            if (show) {
+                if (fileOrUrl) {
+                    if (typeof fileOrUrl === 'string') {
+                        previewImg.src = fileOrUrl;
+                    } else {
+                        previewImg.src = URL.createObjectURL(fileOrUrl);
+                    }
+                    previewContainer.classList.remove("hidden");
+                } else {
+                    previewContainer.classList.add("hidden");
+                }
+                if (latitude !== null && longitude !== null) {
+                    scanCoords.textContent = `LOC: ${parseFloat(latitude).toFixed(4)}, ${parseFloat(longitude).toFixed(4)}`;
+                } else {
+                    scanCoords.textContent = `LOC: --.--, --.--`;
+                }
+                loader.classList.remove("hidden");
+            } else {
+                loader.classList.add("hidden");
+                if (previewImg.src && previewImg.src.startsWith('blob:')) {
+                    URL.revokeObjectURL(previewImg.src);
+                }
+                previewImg.src = "";
+            }
         }
 
         // Submit final audited report details
@@ -1139,7 +1213,20 @@
             }
 
             closeWizard();
-            showLoader(true);
+            if (wizardFiles && wizardFiles.length > 0) {
+                showLoader(true, wizardFiles[0], wizardLat, wizardLng);
+            } else if (wizardImagePath) {
+                let singleImg = wizardImagePath;
+                try {
+                    const parsed = JSON.parse(wizardImagePath);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        singleImg = parsed[0];
+                    }
+                } catch(e) {}
+                showLoader(true, singleImg, wizardLat, wizardLng);
+            } else {
+                showLoader(true);
+            }
 
             try {
                 const resp = await fetch("/api/reports/submit", {
