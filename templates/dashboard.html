@@ -641,7 +641,10 @@
                 tr.innerHTML = `
                     <td class="py-3.5 px-4 font-mono font-bold text-slate-300">${r.id}</td>
                     <td class="py-3.5 px-4">
-                        <img src="${getFirstImagePath(r.image_path)}" class="w-10 h-10 object-cover rounded-xl border border-white/10" alt="thumbnail">
+                        <div class="relative w-10 h-10 overflow-hidden rounded-xl border border-white/10">
+                            <img src="${getFirstImagePath(r.image_path)}" class="w-full h-full object-cover" alt="thumbnail">
+                            ${r.status === 'Processing' ? '<div class="scanner-laser"></div>' : ''}
+                        </div>
                     </td>
                     <td class="py-3.5 px-4 text-xs text-slate-400">${new Date(r.created_at).toLocaleDateString()}</td>
                     <td class="py-3.5 px-4 font-semibold text-slate-200">${r.department}</td>

@@ -767,17 +767,26 @@
                 }
 
                 data.forEach(r => {
-                    const statusColor = r.status === 'Resolved' ? 'bg-[#00FFC2]/20 text-[#00FFC2]' : 'bg-red-500/20 text-red-400';
+                    let statusColor = 'bg-red-500/20 text-red-400';
+                    if (r.status === 'Resolved') {
+                        statusColor = 'bg-[#00FFC2]/20 text-[#00FFC2]';
+                    } else if (r.status === 'Processing') {
+                        statusColor = 'bg-indigo-500/20 text-indigo-300 animate-pulse border border-indigo-500/30';
+                    }
                     const div = document.createElement("div");
-                    div.className = "glass-card rounded-xl p-3.5 space-y-2 text-xs";
+                    div.className = "glass-card rounded-xl p-3.5 space-y-2 text-xs relative overflow-hidden";
                     div.innerHTML = `
+                        ${r.status === 'Processing' ? '<div class="scanner-laser"></div>' : ''}
                         <div class="flex justify-between items-center">
                             <span class="font-mono font-bold text-slate-300">${r.id}</span>
                             <span class="px-2 py-0.5 rounded text-[10px] font-bold ${statusColor}">${r.status}</span>
                         </div>
                         <p class="text-slate-400 text-[11px]"><b>Dept:</b> ${r.department} | <b>Priority:</b> Lvl ${r.priority}</p>
                         <div class="flex gap-2 items-center">
-                            <img src="${getFirstImagePath(r.image_path)}" class="w-12 h-12 object-cover rounded border border-white/10" />
+                            <div class="relative w-12 h-12 overflow-hidden rounded border border-white/10">
+                                <img src="${getFirstImagePath(r.image_path)}" class="w-full h-full object-cover" />
+                                ${r.status === 'Processing' ? '<div class="scanner-laser"></div>' : ''}
+                            </div>
                             <span class="text-slate-500 text-[10px]">${new Date(r.created_at).toLocaleString()}</span>
                         </div>
                     `;
@@ -813,7 +822,10 @@
                 // Beautiful hover tooltip cards displaying the image thumbnail
                 const tooltipContent = `
                     <div class="glass-panel p-2.5 rounded-xl border border-white/10 shadow-2xl flex flex-col items-center text-center text-xs" style="min-width: 140px;">
-                        <img src="${getFirstImagePath(r.image_path)}" class="w-24 h-24 object-cover rounded-lg border border-white/10 mb-2" />
+                        <div class="relative w-24 h-24 overflow-hidden rounded-lg border border-white/10 mb-2">
+                            <img src="${getFirstImagePath(r.image_path)}" class="w-full h-full object-cover" />
+                            ${r.status === 'Processing' ? '<div class="scanner-laser"></div>' : ''}
+                        </div>
                         <span class="font-mono font-bold text-white block mb-0.5">${r.id}</span>
                         <span class="text-[10px] text-slate-400 block">${r.department}</span>
                         <span class="inline-block mt-1.5 px-2 py-0.5 rounded text-[8px] font-extrabold uppercase" style="background-color: ${color}; color: #030305;">
@@ -842,15 +854,21 @@
                 activeMarkers.push(marker);
                 
                 if (r.status !== 'Resolved') {
+                    const isProcessing = r.status === 'Processing';
+                    const btnHtml = isProcessing 
+                        ? `<button disabled class="w-full bg-slate-800 text-slate-500 font-bold text-2xs py-2 rounded-lg cursor-not-allowed">AI Processing...</button>`
+                        : `<button onclick="resolveReport('${r.id}')" class="w-full bg-[#00FFC2] hover:bg-[#00e5b0] text-black font-bold text-2xs py-2 rounded-lg transition-all">Mark Resolved</button>`;
+                    
                     const div = document.createElement("div");
-                    div.className = "glass-card rounded-xl p-3.5 space-y-2 text-xs";
+                    div.className = "glass-card rounded-xl p-3.5 space-y-2 text-xs relative overflow-hidden";
                     div.innerHTML = `
+                        ${isProcessing ? '<div class="scanner-laser"></div>' : ''}
                         <div class="flex justify-between items-center">
                             <span class="font-mono font-bold text-slate-300">${r.id}</span>
                             <span class="text-red-400 font-semibold">Priority: ${r.priority}</span>
                         </div>
                         <p class="text-slate-400 text-[11px]">Dept: ${r.department}</p>
-                        <button onclick="resolveReport('${r.id}')" class="w-full bg-[#00FFC2] hover:bg-[#00e5b0] text-black font-bold text-2xs py-2 rounded-lg transition-all">Mark Resolved</button>
+                        ${btnHtml}
                     `;
                     officerList.appendChild(div);
                 }
