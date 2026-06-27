@@ -2,7 +2,6 @@ from unittest.mock import MagicMock, patch
 import gemini_service
 
 def test_mock_fallback():
-    # Force client to None to verify static fallback response
     with patch("gemini_service.client", None):
         result = gemini_service.analyze_report_image(b"mock_bytes")
         assert "tags" in result
@@ -15,13 +14,11 @@ def test_mock_fallback():
 def test_gemini_service_with_client():
     mock_client = MagicMock()
     
-    # Mock Stage 1 Response (Vision Description)
     mock_response_1 = MagicMock()
     mock_response_1.text = "Visual description of a pothole."
     
-    # Mock Stage 2 Response (Structured Analysis JSON)
     mock_response_2 = MagicMock()
-    mock_response_2.text = '{"tags": ["Pothole"], "department": "Municipal Roads", "priority": 3, "analysis": "A small road pothole."}'
+    mock_response_2.text = '{"tags": ["Pothole"], "department": "Municipal Roads", "priority": 3, "analysis": "A small road pothole.", "estimated_resolution_hours": 48, "clarification_requested": false}'
     
     mock_client.models.generate_content.side_effect = [mock_response_1, mock_response_2]
     
@@ -39,7 +36,8 @@ def test_verify_resolution_with_client():
     mock_response.text = '{"verified": true, "explanation": "Successfully fixed."}'
     mock_client.models.generate_content.return_value = mock_response
     
-    with patch("gemini_service.client", mock_client):
+    with patch("gemini_service.client", mock_client), \
+         patch("PIL.Image.open") as mock_open:
         result = gemini_service.verify_resolution(b"before", b"after")
         assert result["verified"] is True
         assert result["explanation"] == "Successfully fixed."
