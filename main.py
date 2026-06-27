@@ -1,7 +1,7 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 import database
 import gemini_service
 import uuid
@@ -9,10 +9,30 @@ import math
 import os
 from datetime import datetime, timezone
 import json
-from typing import List
+from typing import List, Optional
 import aiofiles
 from pathlib import Path
 import base64
+import html
+import time
+from collections import defaultdict
+
+# Secure custom in-memory rate limiter with zero external dependencies
+class SimpleRateLimiter:
+    def __init__(self, requests_limit: int, window_seconds: int):
+        self.requests_limit = requests_limit
+        self.window_seconds = window_seconds
+        self.history = defaultdict(list)
+
+    def is_allowed(self, client_ip: str) -> bool:
+        now = time.time()
+        self.history[client_ip] = [t for t in self.history[client_ip] if now - t < self.window_seconds]
+        if len(self.history[client_ip]) >= self.requests_limit:
+            return False
+        self.history[client_ip].append(now)
+        return True
+
+submit_limiter = SimpleRateLimiter(requests_limit=20, window_seconds=60)
 
 def is_safe_path(base_dir: Path, target_path: Path) -> bool:
     try:
@@ -24,13 +44,16 @@ def is_safe_path(base_dir: Path, target_path: Path) -> bool:
 
 app = FastAPI(title="CivicFix Core")
 
-# Enable CORS
+# Configure CORS dynamically from ALLOWED_ORIGINS env var with safe defaults
+allowed_origins_str = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000,http://127.0.0.1:8000,http://127.0.0.1:5500")
+origins = [o.strip() for o in allowed_origins_str.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # Ensure folders exist
@@ -46,6 +69,15 @@ def get_distance(lat1, lon1, lat2, lon2):
     a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
+
+# Health check route
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "ok",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "database": "connected"
+    }
 
 def async_process_report_ai(report_id: str, final_db_paths: list, user_note: str, latitude: float, longitude: float):
     images_bytes = []
@@ -65,13 +97,19 @@ def async_process_report_ai(report_id: str, final_db_paths: list, user_note: str
                 except Exception as e:
                     print(f"Failed to read image {local_path}: {e}")
                 
+    conn = None
     try:
-        ai_data = gemini_service.analyze_report_images(images_bytes, user_note)
+        ai_data = gemini_service.analyze_report_images(images_bytes, user_note, latitude, longitude)
         tags_list = ai_data.get("tags", ["unknown"])
-        dept = ai_data.get("department", "Other")
+        dept = ai_data.get("department", "Other Issues")
         priority = ai_data.get("priority", 1)
         description = ai_data.get("analysis", "No description provided.")
+        clarification_requested = ai_data.get("clarification_requested", False)
         
+        status = "Clarification Needed" if clarification_requested else "Pending"
+        if clarification_requested and "suggested_action" in ai_data:
+            description = ai_data["suggested_action"]
+            
         conn = database.get_db()
         cursor = conn.cursor()
         
@@ -90,26 +128,40 @@ def async_process_report_ai(report_id: str, final_db_paths: list, user_note: str
         
         cursor.execute("""
             UPDATE reports
-            SET tags = ?, department = ?, priority = ?, description = ?, status = 'Pending', updated_at = ?
+            SET tags = ?, department = ?, priority = ?, description = ?, status = ?, updated_at = ?
             WHERE id = ?
         """, (
             json.dumps(tags_list),
             dept,
             final_priority,
             description,
+            status,
             datetime.now(timezone.utc).isoformat(),
             report_id
         ))
         conn.commit()
-        conn.close()
-        print(f"Background AI processing succeeded for report {report_id}")
+        print(f"Background AI processing succeeded for report {report_id} -> {status}")
     except Exception as e:
         print(f"Error in background AI analysis for {report_id}: {e}")
+        try:
+            if not conn:
+                conn = database.get_db()
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE reports SET status = 'Failed', description = ? WHERE id = ?",
+                (f"AI processing failed: {str(e)[:200]}", report_id)
+            )
+            conn.commit()
+        except Exception as db_err:
+            print(f"Failed to write failure status to DB: {db_err}")
+    finally:
+        if conn:
+            conn.close()
 
 @app.post("/api/reports/analyze")
 async def analyze_photo(
     images: List[UploadFile] = File(None),
-    image: UploadFile = File(None), # Single image fallback
+    image: UploadFile = File(None),
     user_note: str = Form(None)
 ):
     uploaded_files = []
@@ -131,26 +183,37 @@ async def analyze_photo(
 
 @app.post("/api/reports/submit")
 async def submit_report(
+    request: Request,
     background_tasks: BackgroundTasks,
     images: List[UploadFile] = File(None),
-    image: UploadFile = File(None), # Single image fallback
-    image_path: str = Form(None), # JSON list of paths or single path string
+    image: UploadFile = File(None),
+    image_path: str = Form(None),
     latitude: float = Form(...),
     longitude: float = Form(...),
-    tags: str = Form(None), # JSON serialized tags list or None
+    tags: str = Form(None),
     department: str = Form(None),
     priority: int = Form(None),
     description: str = Form(None),
-    user_note: str = Form(None), # Reporter note for AI
+    user_note: str = Form(None),
     reporter_email: str = Form("anonymous@civicfix.org"),
     reporter_name: str = Form("Anonymous"),
     reporter_avatar: str = Form(""),
-    token: str = Form(None) # Optional QR session token to link
+    token: str = Form(None)
 ):
+    # Enforce Rate Limiting
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    if not submit_limiter.is_allowed(client_ip):
+        raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
+
+    # Sanitize HTML tags from inputs to prevent injection/XSS
+    user_note_clean = html.escape(user_note) if user_note else None
+    desc_clean = html.escape(description) if description else None
+    reporter_email_clean = html.escape(reporter_email) if reporter_email else "anonymous@civicfix.org"
+    reporter_name_clean = html.escape(reporter_name) if reporter_name else "Anonymous"
+
     report_id = f"CF-{uuid.uuid4().hex[:6].upper()}"
     final_db_paths = []
     
-    # Gather uploaded files
     uploaded_files = []
     if images:
         uploaded_files = images
@@ -165,13 +228,11 @@ async def submit_report(
             async with aiofiles.open(filepath, "wb") as f:
                 await f.write(contents)
             
-            # Convert to base64
             encoded = base64.b64encode(contents).decode("utf-8")
             base64_url = f"data:image/jpeg;base64,{encoded}"
             final_db_paths.append(base64_url)
             
     elif image_path:
-        # Check if it is a JSON list of paths
         try:
             paths = json.loads(image_path)
             if not isinstance(paths, list):
@@ -180,18 +241,18 @@ async def submit_report(
             paths = [image_path]
             
         base_dir = Path(UPLOAD_DIR)
-        for idx, path in enumerate(paths):
-            if path.startswith("data:image/"):
-                final_db_paths.append(path)
+        for idx, path_str in enumerate(paths):
+            if path_str.startswith("data:image/"):
+                final_db_paths.append(path_str)
             else:
-                local_path = path.replace("/uploads/", f"{UPLOAD_DIR}/", 1) if path.startswith("/uploads/") else path
+                local_path = path_str.replace("/uploads/", f"{UPLOAD_DIR}/", 1) if path_str.startswith("/uploads/") else path_str
                 path_obj = Path(local_path)
                 if not is_safe_path(base_dir, path_obj):
                     raise HTTPException(status_code=400, detail="Access denied")
                 resolved_path = str(path_obj.resolve())
                     
                 if not os.path.exists(resolved_path):
-                    raise HTTPException(status_code=404, detail=f"Draft image not found: {path}")
+                    raise HTTPException(status_code=404, detail=f"Draft image not found: {path_str}")
                     
                 filename = f"{report_id}_before_{idx}.jpg"
                 filepath = os.path.join(UPLOAD_DIR, filename)
@@ -200,7 +261,6 @@ async def submit_report(
                 async with aiofiles.open(filepath, "wb") as dst:
                     await dst.write(src_contents)
                 
-                # Convert copy to base64
                 encoded = base64.b64encode(src_contents).decode("utf-8")
                 base64_url = f"data:image/jpeg;base64,{encoded}"
                 final_db_paths.append(base64_url)
@@ -213,11 +273,9 @@ async def submit_report(
     conn = database.get_db()
     cursor = conn.cursor()
     
-    # Check if this is the async path (tags/department/priority/description are missing)
     is_async = tags is None or department is None or priority is None
     
     if is_async:
-        # Insert report in "Processing" state
         status = "Processing"
         initial_tags = ["Processing"]
         initial_dept = "Processing"
@@ -232,31 +290,28 @@ async def submit_report(
         """, (
             report_id, latitude, longitude, db_image_path_str, json.dumps(initial_tags), 
             initial_dept, initial_priority, 1, status, now_str, now_str, 
-            reporter_email, reporter_name, initial_desc
+            reporter_email_clean, reporter_name_clean, initial_desc
         ))
         
-        # Enqueue background processing task
-        background_tasks.add_task(async_process_report_ai, report_id, final_db_paths, user_note, latitude, longitude)
+        background_tasks.add_task(async_process_report_ai, report_id, final_db_paths, user_note_clean, latitude, longitude)
         
         tags_return = initial_tags
         dept_return = initial_dept
         priority_return = initial_priority
     else:
-        # Synchronous path (e.g. from existing test suites or direct manual submission)
         status = "Pending"
         try:
             tags_list = json.loads(tags)
         except Exception:
             tags_list = [tags]
             
-        # Basic clustering: If any open report is within 75 meters (0.075 km), link it
         cursor.execute("SELECT id, latitude, longitude, priority, votes FROM reports WHERE status != 'Resolved'")
         active_reports = cursor.fetchall()
         
         priority_bonus = 0
         for rep in active_reports:
             dist = get_distance(latitude, longitude, rep["latitude"], rep["longitude"])
-            if dist <= 0.075: # 75 meters
+            if dist <= 0.075:
                 priority_bonus += 1
                 cursor.execute("UPDATE reports SET votes = votes + 1 WHERE id = ?", (rep["id"],))
                 
@@ -270,30 +325,24 @@ async def submit_report(
         """, (
             report_id, latitude, longitude, db_image_path_str, json.dumps(tags_list), 
             department, final_priority, 1, status, now_str, now_str, 
-            reporter_email, reporter_name, description or "No description provided."
+            reporter_email_clean, reporter_name_clean, desc_clean or "No description provided."
         ))
         
         tags_return = tags_list
         dept_return = department
         priority_return = final_priority
 
-    # Upsert leaderboard info
-    cursor.execute("SELECT civic_points, reports_submitted FROM leaderboard WHERE email = ?", (reporter_email,))
-    lead_row = cursor.fetchone()
-    if lead_row:
-        new_pts = lead_row["civic_points"] + 10
-        new_subs = lead_row["reports_submitted"] + 1
-        cursor.execute("UPDATE leaderboard SET civic_points = ?, reports_submitted = ?, username = ?, avatar_url = ? WHERE email = ?", (
-            new_pts, new_subs, reporter_name, reporter_avatar, reporter_email
-        ))
-    else:
-        cursor.execute("""
+    # Idempotent Atomic Upsert to prevent race conditions
+    cursor.execute("""
         INSERT INTO leaderboard (email, username, avatar_url, civic_points, reports_submitted)
         VALUES (?, ?, ?, 10, 1)
-        ON CONFLICT (email) DO NOTHING
-        """, (reporter_email, reporter_name, reporter_avatar))
+        ON CONFLICT(email) DO UPDATE SET
+            civic_points = civic_points + 10,
+            reports_submitted = reports_submitted + 1,
+            username = excluded.username,
+            avatar_url = excluded.avatar_url
+    """, (reporter_email_clean, reporter_name_clean, reporter_avatar))
         
-    # Link QR session if token is provided
     if token:
         cursor.execute("UPDATE qr_sessions SET status = 'uploaded', associated_report_id = ? WHERE token = ?", (report_id, token))
         
@@ -319,7 +368,6 @@ async def vote_report(id: str):
         raise HTTPException(status_code=404, detail="Report not found")
     
     new_votes = row["votes"] + 1
-    # Simple threshold escalation: every 5 votes adds +1 priority level, max 5
     new_priority = min(5, row["priority"] + (1 if new_votes % 5 == 0 else 0))
     
     cursor.execute("UPDATE reports SET votes = ?, priority = ? WHERE id = ?", (new_votes, new_priority, id))
@@ -366,7 +414,6 @@ async def get_my_reports(email: str):
     return [dict(row) for row in rows]
 
 from pydantic import BaseModel
-from typing import Optional
 
 class CreateSessionRequest(BaseModel):
     reporter_email: Optional[str] = None
@@ -424,8 +471,9 @@ def async_process_draft_ai(token: str, final_db_paths: list, latitude: float, lo
                 except Exception as e:
                     print(f"Failed to read image {local_path}: {e}")
                 
+    conn = None
     try:
-        ai_data = gemini_service.analyze_report_images(images_bytes)
+        ai_data = gemini_service.analyze_report_images(images_bytes, None, latitude, longitude)
         
         draft_meta = {
             "image_path": json.dumps(final_db_paths),
@@ -447,10 +495,23 @@ def async_process_draft_ai(token: str, final_db_paths: list, latitude: float, lo
             (json.dumps(draft_meta), token)
         )
         conn.commit()
-        conn.close()
         print(f"Draft session {token} processed by AI and set to draft.")
     except Exception as e:
         print(f"Error in background AI analysis for draft session {token}: {e}")
+        try:
+            if not conn:
+                conn = database.get_db()
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE qr_sessions SET status = 'failed' WHERE token = ?",
+                (token,)
+            )
+            conn.commit()
+        except Exception as db_err:
+            print(f"Failed to write draft failure status to DB: {db_err}")
+    finally:
+        if conn:
+            conn.close()
 
 @app.post("/api/sessions/upload/{token}")
 async def upload_session_photo(
@@ -583,7 +644,6 @@ async def resolve_report(id: str, resolved_image: UploadFile = File(...)):
     
     if verify_data["verified"]:
         now_str = datetime.now(timezone.utc).isoformat()
-        # Convert resolved image to base64
         encoded_after = base64.b64encode(after_contents).decode("utf-8")
         db_resolved_path = f"data:image/jpeg;base64,{encoded_after}"
         cursor.execute("""
@@ -595,9 +655,6 @@ async def resolve_report(id: str, resolved_image: UploadFile = File(...)):
     
     conn.close()
     return verify_data
-
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 # Expose uploaded images
 app.mount("/tmp/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads_tmp")
@@ -627,4 +684,3 @@ async def serve_report():
 @app.get("/leaderboard", response_class=HTMLResponse)
 async def serve_leaderboard():
     return HTMLResponse(content=TEMPLATES.get("leaderboard.html", ""))
-

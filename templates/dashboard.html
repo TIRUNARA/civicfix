@@ -302,41 +302,54 @@
         let currentUser = JSON.parse(localStorage.getItem("user") || "null");
         let activeReports = [];
 
-        function getFirstImagePath(pathString) {
-            if (!pathString) return "";
-            try {
-                let parsed = JSON.parse(pathString);
-                if (typeof parsed === "string") {
-                    try {
-                        parsed = JSON.parse(parsed);
-                    } catch(e) {}
+        function normalizeImagePaths(input) {
+            if (!input) return [];
+            let paths = [];
+            if (Array.isArray(input)) {
+                paths = input;
+            } else if (typeof input === "string") {
+                try {
+                    let parsed = JSON.parse(input);
+                    if (typeof parsed === "string") {
+                        try {
+                            parsed = JSON.parse(parsed);
+                        } catch(e) {}
+                    }
+                    if (Array.isArray(parsed)) {
+                        paths = parsed;
+                    } else {
+                        paths = [parsed];
+                    }
+                } catch(e) {
+                    if (input.startsWith('[') && input.endsWith(']')) {
+                        try {
+                            const match = input.match(/"([^"]+)"/g);
+                            if (match) {
+                                paths = match.map(m => m.replace(/"/g, ''));
+                            } else {
+                                paths = [input];
+                            }
+                        } catch(err) {
+                            paths = [input];
+                        }
+                    } else {
+                        paths = [input];
+                    }
                 }
-                if (Array.isArray(parsed)) {
-                    return parsed[0] || "";
-                }
-                return parsed;
-            } catch(e) {
-                if (pathString.startsWith('[') && pathString.endsWith(']')) {
-                    try {
-                        const match = pathString.match(/"([^"]+)"/);
-                        if (match) return match[1];
-                    } catch(err) {}
-                }
-                return pathString;
+            } else {
+                paths = [input];
             }
+            return paths.map(p => typeof p === 'string' ? p.trim() : String(p)).filter(p => p.length > 0);
+        }
+
+        function getFirstImagePath(pathString) {
+            const paths = normalizeImagePaths(pathString);
+            return paths[0] || "";
         }
 
         function renderImageCarousel(elementId, pathString, fallbackAlt) {
             const container = document.getElementById(elementId);
-            let paths = [];
-            try {
-                paths = JSON.parse(pathString);
-                if (!Array.isArray(paths)) {
-                    paths = [pathString];
-                }
-            } catch(e) {
-                paths = [pathString];
-            }
+            const paths = normalizeImagePaths(pathString);
             
             container.innerHTML = "";
             if (paths.length === 0) {
@@ -608,7 +621,8 @@
                             if (match) {
                                 const currentId = match[0];
                                 const updatedReport = reports.find(x => x.id === currentId);
-                                if (updatedReport && updatedReport.status !== 'Processing') {
+                                const displayedStatus = document.getElementById("modalStatusBadge")?.textContent?.trim();
+                                if (updatedReport && updatedReport.status !== displayedStatus) {
                                     openDetailModal(currentId);
                                 }
                             }
@@ -618,6 +632,7 @@
                         if (!stillProcessing) {
                             clearInterval(dashboardPollingInterval);
                             dashboardPollingInterval = null;
+                            loadDashboardData();
                         }
                     } catch(e) {
                         console.error("Error polling dashboard data", e);

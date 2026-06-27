@@ -281,23 +281,49 @@
         let wizardLat = null;
         let wizardLng = null;
 
-        function renderWizardCarousel(elementId, pathsInput, fallbackAlt) {
-            const container = document.getElementById(elementId);
+        function normalizeImagePaths(input) {
+            if (!input) return [];
             let paths = [];
-            if (Array.isArray(pathsInput)) {
-                paths = pathsInput;
-            } else if (typeof pathsInput === "string") {
+            if (Array.isArray(input)) {
+                paths = input;
+            } else if (typeof input === "string") {
                 try {
-                    paths = JSON.parse(pathsInput);
-                    if (!Array.isArray(paths)) {
-                        paths = [pathsInput];
+                    let parsed = JSON.parse(input);
+                    if (typeof parsed === "string") {
+                        try {
+                            parsed = JSON.parse(parsed);
+                        } catch(e) {}
+                    }
+                    if (Array.isArray(parsed)) {
+                        paths = parsed;
+                    } else {
+                        paths = [parsed];
                     }
                 } catch(e) {
-                    paths = [pathsInput];
+                    if (input.startsWith('[') && input.endsWith(']')) {
+                        try {
+                            const match = input.match(/"([^"]+)"/g);
+                            if (match) {
+                                paths = match.map(m => m.replace(/"/g, ''));
+                            } else {
+                                paths = [input];
+                            }
+                        } catch(err) {
+                            paths = [input];
+                        }
+                    } else {
+                        paths = [input];
+                    }
                 }
             } else {
-                paths = [pathsInput];
+                paths = [input];
             }
+            return paths.map(p => typeof p === 'string' ? p.trim() : String(p)).filter(p => p.length > 0);
+        }
+
+        function renderWizardCarousel(elementId, pathsInput, fallbackAlt) {
+            const container = document.getElementById(elementId);
+            const paths = normalizeImagePaths(pathsInput);
             
             container.innerHTML = "";
             if (paths.length === 0) {

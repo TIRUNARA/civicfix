@@ -148,16 +148,6 @@ def safe_json_parse(response_text: str, client_ref=None, max_retries=3) -> dict:
     }
 
 def analyze_report_images(images_bytes: list, user_note: str = None, latitude: float = 12.9716, longitude: float = 77.5946) -> dict:
-    if not client:
-        return {
-            "tags": ["Pothole", "Broken Asphalt"],
-            "department": "Municipal Roads",
-            "priority": 4,
-            "analysis": f"Static fallback representations. User note: {user_note or 'None'}",
-            "estimated_resolution_hours": 48,
-            "clarification_requested": False
-        }
-
     # Step 1: Verify Image Quality
     for idx, img_bytes in enumerate(images_bytes):
         encoded_img = base64.b64encode(img_bytes).decode("utf-8")
@@ -172,6 +162,16 @@ def analyze_report_images(images_bytes: list, user_note: str = None, latitude: f
                 "clarification_requested": True,
                 "suggested_action": f"Image {idx + 1} is {', '.join(quality['issues'])}. Please upload a clearer, well-lit photo."
             }
+
+    if not client:
+        return {
+            "tags": ["Pothole", "Broken Asphalt"],
+            "department": "Municipal Roads",
+            "priority": 4,
+            "analysis": f"Static fallback representations. User note: {user_note or 'None'}",
+            "estimated_resolution_hours": 48,
+            "clarification_requested": False
+        }
 
     # Step 2: Get nearby reports context
     nearby_reports_json = get_nearby_reports(latitude, longitude, radius_km=0.075)

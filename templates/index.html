@@ -389,28 +389,49 @@
         let pollingInterval = null;
         let currentUser = null;
 
-        function getFirstImagePath(pathString) {
-            if (!pathString) return "";
-            try {
-                let parsed = JSON.parse(pathString);
-                if (typeof parsed === "string") {
-                    try {
-                        parsed = JSON.parse(parsed);
-                    } catch(e) {}
+        function normalizeImagePaths(input) {
+            if (!input) return [];
+            let paths = [];
+            if (Array.isArray(input)) {
+                paths = input;
+            } else if (typeof input === "string") {
+                try {
+                    let parsed = JSON.parse(input);
+                    if (typeof parsed === "string") {
+                        try {
+                            parsed = JSON.parse(parsed);
+                        } catch(e) {}
+                    }
+                    if (Array.isArray(parsed)) {
+                        paths = parsed;
+                    } else {
+                        paths = [parsed];
+                    }
+                } catch(e) {
+                    if (input.startsWith('[') && input.endsWith(']')) {
+                        try {
+                            const match = input.match(/"([^"]+)"/g);
+                            if (match) {
+                                paths = match.map(m => m.replace(/"/g, ''));
+                            } else {
+                                paths = [input];
+                            }
+                        } catch(err) {
+                            paths = [input];
+                        }
+                    } else {
+                        paths = [input];
+                    }
                 }
-                if (Array.isArray(parsed)) {
-                    return parsed[0] || "";
-                }
-                return parsed;
-            } catch(e) {
-                if (pathString.startsWith('[') && pathString.endsWith(']')) {
-                    try {
-                        const match = pathString.match(/"([^"]+)"/);
-                        if (match) return match[1];
-                    } catch(err) {}
-                }
-                return pathString;
+            } else {
+                paths = [input];
             }
+            return paths.map(p => typeof p === 'string' ? p.trim() : String(p)).filter(p => p.length > 0);
+        }
+
+        function getFirstImagePath(pathString) {
+            const paths = normalizeImagePaths(pathString);
+            return paths[0] || "";
         }
 
         // Wizard temporary states
@@ -421,21 +442,7 @@
 
         function renderWizardCarousel(elementId, pathsInput, fallbackAlt) {
             const container = document.getElementById(elementId);
-            let paths = [];
-            if (Array.isArray(pathsInput)) {
-                paths = pathsInput;
-            } else if (typeof pathsInput === "string") {
-                try {
-                    paths = JSON.parse(pathsInput);
-                    if (!Array.isArray(paths)) {
-                        paths = [pathsInput];
-                    }
-                } catch(e) {
-                    paths = [pathsInput];
-                }
-            } else {
-                paths = [pathsInput];
-            }
+            const paths = normalizeImagePaths(pathsInput);
             
             container.innerHTML = "";
             if (paths.length === 0) {
@@ -801,16 +808,42 @@
             }
         }
 
-        // Fetch reports list & draw pins
-        async function loadReports() {
-            const resp = await fetch("/api/reports/list");
-            const reports = await resp.json();
-            
+        let reportsPollingInterval = null;
+
+        function setupReportsPolling(start) {
+            if (reportsPollingInterval) {
+                clearInterval(reportsPollingInterval);
+                reportsPollingInterval = null;
+            }
+            if (start) {
+                reportsPollingInterval = setInterval(async () => {
+                    try {
+                        const resp = await fetch("/api/reports/list");
+                        const reports = await resp.json();
+                        renderReports(reports);
+                        
+                        // Also update personal reports list in real-time
+                        loadMyReports();
+                        
+                        const stillProcessing = reports.some(r => r.status === 'Processing');
+                        if (!stillProcessing) {
+                            clearInterval(reportsPollingInterval);
+                            reportsPollingInterval = null;
+                            loadLeaderboard();
+                        }
+                    } catch(e) {
+                        console.error("Reports polling update failed", e);
+                    }
+                }, 3000);
+            }
+        }
+
+        function renderReports(reports) {
             activeMarkers.forEach(m => map.removeLayer(m));
             activeMarkers = [];
             
             const officerList = document.getElementById("taskList");
-            officerList.innerHTML = "";
+            if (officerList) officerList.innerHTML = "";
             
             reports.forEach(r => {
                 const color = r.status === 'Resolved' ? '#00FFC2' : (r.priority >= 4 ? '#EF4444' : '#F59E0B');
@@ -857,7 +890,7 @@
                 
                 activeMarkers.push(marker);
                 
-                if (r.status !== 'Resolved') {
+                if (officerList && r.status !== 'Resolved') {
                     const isProcessing = r.status === 'Processing';
                     const btnHtml = isProcessing 
                         ? `<button disabled class="w-full bg-slate-800 text-slate-500 font-bold text-2xs py-2 rounded-lg cursor-not-allowed">AI Processing...</button>`
@@ -877,6 +910,20 @@
                     officerList.appendChild(div);
                 }
             });
+        }
+
+        // Fetch reports list & draw pins
+        async function loadReports() {
+            try {
+                const resp = await fetch("/api/reports/list");
+                const reports = await resp.json();
+                renderReports(reports);
+                
+                const hasProcessing = reports.some(r => r.status === 'Processing');
+                setupReportsPolling(hasProcessing);
+            } catch(e) {
+                console.error("Failed to load reports", e);
+            }
         }
 
         async function voteIssue(reportId) {
@@ -1017,6 +1064,9 @@
                 files.forEach(f => {
                     formData.append("images", f);
                 });
+                formData.append("latitude", latitude);
+                formData.append("longitude", longitude);
+                
                 const userNote = document.getElementById("directUserNote") ? document.getElementById("directUserNote").value : "";
                 if (userNote) {
                     formData.append("user_note", userNote);
