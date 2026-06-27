@@ -13,9 +13,21 @@ load_dotenv()
 API_KEY = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GOOGLE_API_KEY_1")
 client = genai.Client(api_key=API_KEY) if API_KEY else None
 
+from typing import Literal
+
 class AnalysisResult(BaseModel):
     tags: list[str]
-    department: str
+    department: Literal[
+        "Municipal Roads",
+        "Water & Sanitation",
+        "Solid Waste",
+        "Utility Streetlighting",
+        "Parks",
+        "National Highways",
+        "State Grid",
+        "Environment Board",
+        "Other Issues"
+    ]
     priority: int
     analysis: str
 
@@ -31,7 +43,7 @@ def analyze_report_images(images_bytes: list, user_note: str = None) -> dict:
     if not client:
         return {
             "tags": ["Pothole", "Broken Asphalt"],
-            "department": "Roads & Traffic",
+            "department": "Municipal Roads",
             "priority": 4,
             "analysis": f"API Client not configured. Static fallback representation. User note: {user_note or 'None'}"
         }
@@ -86,7 +98,7 @@ def analyze_report_images(images_bytes: list, user_note: str = None) -> dict:
         print(f"Google GenAI API call failed: {e}. Returning mock response...")
         return {
             "tags": ["Pothole", "Broken Asphalt"],
-            "department": "Roads & Traffic",
+            "department": "Municipal Roads",
             "priority": 4,
             "analysis": f"GenAI API failure: {e}. User note: {user_note or 'None'}"
         }

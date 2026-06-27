@@ -7,10 +7,19 @@ import gemini_service
 import uuid
 import math
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from typing import List
 import aiofiles
+from pathlib import Path
+
+def is_safe_path(base_dir: Path, target_path: Path) -> bool:
+    try:
+        resolved_base = base_dir.resolve()
+        resolved_target = target_path.resolve()
+        return resolved_target == resolved_base or resolved_base in resolved_target.parents
+    except Exception:
+        return False
 
 app = FastAPI(title="CivicFix Core")
 
@@ -80,7 +89,7 @@ def async_process_report_ai(report_id: str, final_db_paths: list, user_note: str
             dept,
             final_priority,
             description,
-            datetime.utcnow().isoformat(),
+            datetime.now(timezone.utc).isoformat(),
             report_id
         ))
         conn.commit()
@@ -158,15 +167,13 @@ async def submit_report(
         except Exception:
             paths = [image_path]
             
-        base_dir = os.path.realpath(UPLOAD_DIR)
+        base_dir = Path(UPLOAD_DIR)
         for idx, path in enumerate(paths):
             local_path = path.replace("/uploads/", f"{UPLOAD_DIR}/", 1) if path.startswith("/uploads/") else path
-            try:
-                resolved_path = os.path.realpath(local_path)
-                if not (resolved_path == base_dir or resolved_path.startswith(base_dir + os.sep)):
-                    raise HTTPException(status_code=400, detail="Access denied")
-            except Exception:
-                raise HTTPException(status_code=400, detail="Invalid path structure")
+            path_obj = Path(local_path)
+            if not is_safe_path(base_dir, path_obj):
+                raise HTTPException(status_code=400, detail="Access denied")
+            resolved_path = str(path_obj.resolve())
                 
             if not os.path.exists(resolved_path):
                 raise HTTPException(status_code=404, detail=f"Draft image not found: {path}")
@@ -182,7 +189,7 @@ async def submit_report(
         raise HTTPException(status_code=400, detail="No images provided")
         
     db_image_path_str = json.dumps(final_db_paths)
-    now_str = datetime.utcnow().isoformat()
+    now_str = datetime.now(timezone.utc).isoformat()
     
     conn = database.get_db()
     cursor = conn.cursor()
@@ -264,6 +271,7 @@ async def submit_report(
         cursor.execute("""
         INSERT INTO leaderboard (email, username, avatar_url, civic_points, reports_submitted)
         VALUES (?, ?, ?, 10, 1)
+        ON CONFLICT (email) DO NOTHING
         """, (reporter_email, reporter_name, reporter_avatar))
         
     # Link QR session if token is provided
@@ -359,7 +367,7 @@ async def create_session(req: Optional[CreateSessionRequest] = None):
             "reporter_name": req.reporter_name,
             "reporter_avatar": req.reporter_avatar
         })
-    cursor.execute("INSERT INTO qr_sessions (token, status, created_at, draft_data) VALUES (?, 'pending', ?, ?)", (token, datetime.utcnow().isoformat(), draft_json))
+    cursor.execute("INSERT INTO qr_sessions (token, status, created_at, draft_data) VALUES (?, 'pending', ?, ?)", (token, datetime.now(timezone.utc).isoformat(), draft_json))
     conn.commit()
     conn.close()
     return {"token": token}
@@ -398,7 +406,7 @@ def async_process_draft_ai(token: str, final_db_paths: list, latitude: float, lo
             "latitude": latitude,
             "longitude": longitude,
             "tags": ai_data.get("tags", ["Pothole"]),
-            "department": ai_data.get("department", "Roads & Traffic"),
+            "department": ai_data.get("department", "Municipal Roads"),
             "priority": ai_data.get("priority", 3),
             "analysis": ai_data.get("analysis", "AI classified this draft report."),
             "reporter_email": reporter_email,
@@ -514,13 +522,11 @@ async def resolve_report(id: str, resolved_image: UploadFile = File(...)):
         before_filepath = before_filepath.replace("/uploads/", f"{UPLOAD_DIR}/", 1)
         
     # Secure path traversal check
-    base_dir = os.path.realpath(UPLOAD_DIR)
-    try:
-        resolved_before = os.path.realpath(before_filepath)
-        if not (resolved_before == base_dir or resolved_before.startswith(base_dir + os.sep)):
-            raise HTTPException(status_code=400, detail="Access denied")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid path structure")
+    base_dir = Path(UPLOAD_DIR)
+    before_path = Path(before_filepath)
+    if not is_safe_path(base_dir, before_path):
+        raise HTTPException(status_code=400, detail="Access denied")
+    resolved_before = str(before_path.resolve())
         
     # Save resolved image
     after_contents = await resolved_image.read()
@@ -537,7 +543,7 @@ async def resolve_report(id: str, resolved_image: UploadFile = File(...)):
     verify_data = gemini_service.verify_resolution(before_contents, after_contents)
     
     if verify_data["verified"]:
-        now_str = datetime.utcnow().isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         db_resolved_path = f"/uploads/{resolved_filename}"
         cursor.execute("""
         UPDATE reports 

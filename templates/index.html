@@ -312,11 +312,15 @@
                     <div>
                         <label class="block text-3xs font-bold text-slate-500 uppercase tracking-wider mb-1">Department</label>
                         <select id="wizardDept" class="w-full text-xs text-slate-100 bg-slate-950 border border-white/15 rounded-lg p-2.5 focus:outline-none focus:border-[#00FFC2] cursor-pointer">
-                            <option value="Roads">Roads & Potholes</option>
-                            <option value="Sanitation">Sanitation & Garbage</option>
-                            <option value="Utilities">Electrical & Water</option>
-                            <option value="Parks">Public Parks & Spaces</option>
-                            <option value="Other">Other Issues</option>
+                            <option value="Municipal Roads">Municipal Roads</option>
+                            <option value="Water & Sanitation">Water & Sanitation</option>
+                            <option value="Solid Waste">Solid Waste</option>
+                            <option value="Utility Streetlighting">Utility Streetlighting</option>
+                            <option value="Parks">Parks</option>
+                            <option value="National Highways">National Highways</option>
+                            <option value="State Grid">State Grid</option>
+                            <option value="Environment Board">Environment Board</option>
+                            <option value="Other Issues">Other Issues</option>
                         </select>
                     </div>
                     <div>
@@ -767,7 +771,7 @@
                 }
 
                 data.forEach(r => {
-                    let statusColor = 'bg-red-500/20 text-red-400';
+                    let statusColor = 'bg-amber-500/20 text-amber-400';
                     if (r.status === 'Resolved') {
                         statusColor = 'bg-[#00FFC2]/20 text-[#00FFC2]';
                     } else if (r.status === 'Processing') {

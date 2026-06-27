@@ -29,7 +29,7 @@ def populate():
         (
             "CF-9A3B", 12.9735, 77.6075, 
             "/uploads/pothole_mock.jpg", '["Pothole", "Broken Asphalt"]', 
-            "Roads", 4, 12, "Pending", "shiva@civicfix.org", "Shiva_The_Fixer"
+            "Municipal Roads", 4, 12, "Pending", "shiva@civicfix.org", "Shiva_The_Fixer"
         ),
         (
             "CF-4D1C", 12.9782, 77.6408, 
@@ -39,12 +39,12 @@ def populate():
         (
             "CF-8E2A", 12.9345, 77.6101, 
             "/uploads/garbage_mock.jpg", '["Garbage Dump", "Public Hazard"]', 
-            "Sanitation", 2, 5, "Pending", "clean@civicfix.org", "CleanUpNow"
+            "Solid Waste", 2, 5, "Pending", "clean@civicfix.org", "CleanUpNow"
         ),
         (
             "CF-1F7D", 12.9298, 77.5812, 
             "/uploads/streetlight_mock.jpg", '["Broken Streetlight", "Dark Alley"]', 
-            "Utilities", 1, 3, "Resolved", "shiva@civicfix.org", "Shiva_The_Fixer"
+            "Utility Streetlighting", 1, 3, "Resolved", "shiva@civicfix.org", "Shiva_The_Fixer"
         )
     ]
     

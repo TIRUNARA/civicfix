@@ -21,14 +21,14 @@ def test_gemini_service_with_client():
     
     # Mock Stage 2 Response (Structured Analysis JSON)
     mock_response_2 = MagicMock()
-    mock_response_2.text = '{"tags": ["Pothole"], "department": "Roads", "priority": 3, "analysis": "A small road pothole."}'
+    mock_response_2.text = '{"tags": ["Pothole"], "department": "Municipal Roads", "priority": 3, "analysis": "A small road pothole."}'
     
     mock_client.models.generate_content.side_effect = [mock_response_1, mock_response_2]
     
     with patch("gemini_service.client", mock_client):
         result = gemini_service.analyze_report_image(b"mock_image_bytes")
         assert result["tags"] == ["Pothole"]
-        assert result["department"] == "Roads"
+        assert result["department"] == "Municipal Roads"
         assert result["priority"] == 3
         assert result["analysis"] == "A small road pothole."
         assert mock_client.models.generate_content.call_count == 2

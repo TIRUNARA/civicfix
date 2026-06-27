@@ -136,15 +136,9 @@
                 <!-- Status Filter Checklist -->
                 <div class="space-y-2">
                     <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">Status</span>
-                    <div class="grid grid-cols-2 gap-2">
+                    <div class="grid grid-cols-3 gap-2">
                         <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-300">
                             <input type="checkbox" class="status-filter" value="Pending" checked onchange="applyFilters()"> Pending
-                        </label>
-                        <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-300">
-                            <input type="checkbox" class="status-filter" value="Underway" checked onchange="applyFilters()"> Underway
-                        </label>
-                        <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-300">
-                            <input type="checkbox" class="status-filter" value="Work in Progress" checked onchange="applyFilters()"> In Progress
                         </label>
                         <label class="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-300">
                             <input type="checkbox" class="status-filter" value="Resolved" checked onchange="applyFilters()"> Resolved
@@ -160,19 +154,31 @@
                     <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">Department</span>
                     <div class="space-y-2">
                         <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
-                            <input type="checkbox" class="dept-filter" value="Roads" checked onchange="applyFilters()"> Roads & Potholes
+                            <input type="checkbox" class="dept-filter" value="Municipal Roads" checked onchange="applyFilters()"> Municipal Roads
                         </label>
                         <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
-                            <input type="checkbox" class="dept-filter" value="Sanitation" checked onchange="applyFilters()"> Sanitation & Garbage
+                            <input type="checkbox" class="dept-filter" value="Water & Sanitation" checked onchange="applyFilters()"> Water & Sanitation
                         </label>
                         <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
-                            <input type="checkbox" class="dept-filter" value="Utilities" checked onchange="applyFilters()"> Electrical & Water
+                            <input type="checkbox" class="dept-filter" value="Solid Waste" checked onchange="applyFilters()"> Solid Waste
                         </label>
                         <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
-                            <input type="checkbox" class="dept-filter" value="Parks" checked onchange="applyFilters()"> Public Parks & Spaces
+                            <input type="checkbox" class="dept-filter" value="Utility Streetlighting" checked onchange="applyFilters()"> Utility Streetlighting
                         </label>
                         <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
-                            <input type="checkbox" class="dept-filter" value="Other" checked onchange="applyFilters()"> Other Hazards
+                            <input type="checkbox" class="dept-filter" value="Parks" checked onchange="applyFilters()"> Parks
+                        </label>
+                        <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
+                            <input type="checkbox" class="dept-filter" value="National Highways" checked onchange="applyFilters()"> National Highways
+                        </label>
+                        <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
+                            <input type="checkbox" class="dept-filter" value="State Grid" checked onchange="applyFilters()"> State Grid
+                        </label>
+                        <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
+                            <input type="checkbox" class="dept-filter" value="Environment Board" checked onchange="applyFilters()"> Environment Board
+                        </label>
+                        <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
+                            <input type="checkbox" class="dept-filter" value="Other Issues" checked onchange="applyFilters()"> Other Issues
                         </label>
                         <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-300">
                             <input type="checkbox" class="dept-filter" value="Processing" checked onchange="applyFilters()"> Processing (AI Analyzing)
@@ -526,14 +532,18 @@
         }
 
         function normalizeDepartment(dept) {
-            if (!dept) return "Other";
+            if (!dept) return "Other Issues";
             const d = dept.toLowerCase();
-            if (d.includes("road") || d.includes("traffic")) return "Roads";
-            if (d.includes("sanitation") || d.includes("waste") || d.includes("garbage")) return "Sanitation";
-            if (d.includes("electric") || d.includes("water") || d.includes("utility")) return "Utilities";
-            if (d.includes("park") || d.includes("forest") || d.includes("space")) return "Parks";
+            if (d === "municipal roads" || d.includes("municipal road") || d === "roads" || d.includes("pothole") || d.includes("traffic")) return "Municipal Roads";
+            if (d === "water & sanitation" || d.includes("sewer") || d.includes("water")) return "Water & Sanitation";
+            if (d === "solid waste" || d.includes("solid waste") || d.includes("garbage") || d.includes("waste") || d.includes("trash") || d === "sanitation") return "Solid Waste";
+            if (d === "utility streetlighting" || d.includes("streetlight") || d.includes("lighting")) return "Utility Streetlighting";
+            if (d === "parks" || d.includes("park") || d.includes("forest") || d.includes("space")) return "Parks";
+            if (d === "national highways" || d.includes("national highway") || d.includes("highway")) return "National Highways";
+            if (d === "state grid" || d.includes("state grid") || d.includes("grid") || d.includes("electricity") || d === "utilities") return "State Grid";
+            if (d === "environment board" || d.includes("environment") || d.includes("board")) return "Environment Board";
             if (d.includes("processing")) return "Processing";
-            return "Other";
+            return "Other Issues";
         }
 
         function applyFilters() {
