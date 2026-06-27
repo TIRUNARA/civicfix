@@ -12,6 +12,7 @@ import json
 from typing import List
 import aiofiles
 from pathlib import Path
+import base64
 
 def is_safe_path(base_dir: Path, target_path: Path) -> bool:
     try:
@@ -49,13 +50,20 @@ def get_distance(lat1, lon1, lat2, lon2):
 def async_process_report_ai(report_id: str, final_db_paths: list, user_note: str, latitude: float, longitude: float):
     images_bytes = []
     for path in final_db_paths:
-        local_path = path.replace("/uploads/", f"{UPLOAD_DIR}/", 1)
-        if os.path.exists(local_path):
+        if path.startswith("data:image/"):
             try:
-                with open(local_path, "rb") as f:
-                    images_bytes.append(f.read())
+                header, encoded = path.split(",", 1)
+                images_bytes.append(base64.b64decode(encoded))
             except Exception as e:
-                print(f"Failed to read image {local_path}: {e}")
+                print(f"Failed to decode base64 image in async_process_report_ai: {e}")
+        else:
+            local_path = path.replace("/uploads/", f"{UPLOAD_DIR}/", 1) if path.startswith("/uploads/") else path
+            if os.path.exists(local_path):
+                try:
+                    with open(local_path, "rb") as f:
+                        images_bytes.append(f.read())
+                except Exception as e:
+                    print(f"Failed to read image {local_path}: {e}")
                 
     try:
         ai_data = gemini_service.analyze_report_images(images_bytes, user_note)
@@ -156,7 +164,11 @@ async def submit_report(
             contents = await img_file.read()
             async with aiofiles.open(filepath, "wb") as f:
                 await f.write(contents)
-            final_db_paths.append(f"/uploads/{filename}")
+            
+            # Convert to base64
+            encoded = base64.b64encode(contents).decode("utf-8")
+            base64_url = f"data:image/jpeg;base64,{encoded}"
+            final_db_paths.append(base64_url)
             
     elif image_path:
         # Check if it is a JSON list of paths
@@ -169,22 +181,29 @@ async def submit_report(
             
         base_dir = Path(UPLOAD_DIR)
         for idx, path in enumerate(paths):
-            local_path = path.replace("/uploads/", f"{UPLOAD_DIR}/", 1) if path.startswith("/uploads/") else path
-            path_obj = Path(local_path)
-            if not is_safe_path(base_dir, path_obj):
-                raise HTTPException(status_code=400, detail="Access denied")
-            resolved_path = str(path_obj.resolve())
+            if path.startswith("data:image/"):
+                final_db_paths.append(path)
+            else:
+                local_path = path.replace("/uploads/", f"{UPLOAD_DIR}/", 1) if path.startswith("/uploads/") else path
+                path_obj = Path(local_path)
+                if not is_safe_path(base_dir, path_obj):
+                    raise HTTPException(status_code=400, detail="Access denied")
+                resolved_path = str(path_obj.resolve())
+                    
+                if not os.path.exists(resolved_path):
+                    raise HTTPException(status_code=404, detail=f"Draft image not found: {path}")
+                    
+                filename = f"{report_id}_before_{idx}.jpg"
+                filepath = os.path.join(UPLOAD_DIR, filename)
+                async with aiofiles.open(resolved_path, "rb") as src:
+                    src_contents = await src.read()
+                async with aiofiles.open(filepath, "wb") as dst:
+                    await dst.write(src_contents)
                 
-            if not os.path.exists(resolved_path):
-                raise HTTPException(status_code=404, detail=f"Draft image not found: {path}")
-                
-            filename = f"{report_id}_before_{idx}.jpg"
-            filepath = os.path.join(UPLOAD_DIR, filename)
-            async with aiofiles.open(resolved_path, "rb") as src:
-                src_contents = await src.read()
-            async with aiofiles.open(filepath, "wb") as dst:
-                await dst.write(src_contents)
-            final_db_paths.append(f"/uploads/{filename}")
+                # Convert copy to base64
+                encoded = base64.b64encode(src_contents).decode("utf-8")
+                base64_url = f"data:image/jpeg;base64,{encoded}"
+                final_db_paths.append(base64_url)
     else:
         raise HTTPException(status_code=400, detail="No images provided")
         
@@ -390,13 +409,20 @@ async def get_session_status(token: str):
 def async_process_draft_ai(token: str, final_db_paths: list, latitude: float, longitude: float, reporter_email: str, reporter_name: str, reporter_avatar: str):
     images_bytes = []
     for path in final_db_paths:
-        local_path = path.replace("/uploads/", f"{UPLOAD_DIR}/", 1) if path.startswith("/uploads/") else path
-        if os.path.exists(local_path):
+        if path.startswith("data:image/"):
             try:
-                with open(local_path, "rb") as f:
-                    images_bytes.append(f.read())
+                header, encoded = path.split(",", 1)
+                images_bytes.append(base64.b64decode(encoded))
             except Exception as e:
-                print(f"Failed to read image {local_path}: {e}")
+                print(f"Failed to decode base64 image in async_process_draft_ai: {e}")
+        else:
+            local_path = path.replace("/uploads/", f"{UPLOAD_DIR}/", 1) if path.startswith("/uploads/") else path
+            if os.path.exists(local_path):
+                try:
+                    with open(local_path, "rb") as f:
+                        images_bytes.append(f.read())
+                except Exception as e:
+                    print(f"Failed to read image {local_path}: {e}")
                 
     try:
         ai_data = gemini_service.analyze_report_images(images_bytes)
@@ -468,7 +494,11 @@ async def upload_session_photo(
         filepath = os.path.join(UPLOAD_DIR, filename)
         async with aiofiles.open(filepath, "wb") as f:
             await f.write(contents)
-        final_db_paths.append(f"/uploads/{filename}")
+        
+        # Convert to base64
+        encoded = base64.b64encode(contents).decode("utf-8")
+        base64_url = f"data:image/jpeg;base64,{encoded}"
+        final_db_paths.append(base64_url)
         
     # Determine reporter settings from draft_data
     reporter_email = "anonymous@civicfix.org"
@@ -518,33 +548,44 @@ async def resolve_report(id: str, resolved_image: UploadFile = File(...)):
     except Exception:
         before_filepath = before_filepath_raw
 
-    if before_filepath.startswith("/uploads/"):
-        before_filepath = before_filepath.replace("/uploads/", f"{UPLOAD_DIR}/", 1)
-        
-    # Secure path traversal check
-    base_dir = Path(UPLOAD_DIR)
-    before_path = Path(before_filepath)
-    if not is_safe_path(base_dir, before_path):
-        raise HTTPException(status_code=400, detail="Access denied")
-    resolved_before = str(before_path.resolve())
-        
     # Save resolved image
     after_contents = await resolved_image.read()
     resolved_filename = f"{id}_after.jpg"
     after_filepath = os.path.join(UPLOAD_DIR, resolved_filename)
     async with aiofiles.open(after_filepath, "wb") as f:
         await f.write(after_contents)
-        
-    # Read before image bytes
-    async with aiofiles.open(resolved_before, "rb") as f:
-        before_contents = await f.read()
+
+    if before_filepath.startswith("data:image/"):
+        try:
+            header, encoded = before_filepath.split(",", 1)
+            before_contents = base64.b64decode(encoded)
+        except Exception as e:
+            conn.close()
+            raise HTTPException(status_code=400, detail=f"Failed to decode base64 before image: {e}")
+    else:
+        if before_filepath.startswith("/uploads/"):
+            before_filepath = before_filepath.replace("/uploads/", f"{UPLOAD_DIR}/", 1)
+            
+        # Secure path traversal check
+        base_dir = Path(UPLOAD_DIR)
+        before_path = Path(before_filepath)
+        if not is_safe_path(base_dir, before_path):
+            conn.close()
+            raise HTTPException(status_code=400, detail="Access denied")
+        resolved_before = str(before_path.resolve())
+            
+        # Read before image bytes
+        async with aiofiles.open(resolved_before, "rb") as f:
+            before_contents = await f.read()
         
     # Verify resolution using Gemini Vision
     verify_data = gemini_service.verify_resolution(before_contents, after_contents)
     
     if verify_data["verified"]:
         now_str = datetime.now(timezone.utc).isoformat()
-        db_resolved_path = f"/uploads/{resolved_filename}"
+        # Convert resolved image to base64
+        encoded_after = base64.b64encode(after_contents).decode("utf-8")
+        db_resolved_path = f"data:image/jpeg;base64,{encoded_after}"
         cursor.execute("""
         UPDATE reports 
         SET status = 'Resolved', resolved_image_path = ?, updated_at = ? 

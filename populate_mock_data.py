@@ -50,7 +50,19 @@ def populate():
     
     print("Populating reports...")
     now_str = time.strftime("%Y-%m-%d %H:%M:%S")
+    import base64
+    import json
     for r_id, lat, lng, img, tags, dept, priority, votes, status, rep_email, rep_name in reports:
+        filename = os.path.basename(img)
+        filepath = os.path.join(os.path.dirname(__file__), "uploads", filename)
+        if os.path.exists(filepath):
+            with open(filepath, "rb") as f:
+                img_data = f.read()
+            encoded = base64.b64encode(img_data).decode("utf-8")
+            db_image_path = json.dumps([f"data:image/jpeg;base64,{encoded}"])
+        else:
+            db_image_path = json.dumps([img])
+            
         query = """
         INSERT INTO reports (
             id, latitude, longitude, image_path, tags, 
@@ -58,7 +70,7 @@ def populate():
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         cursor.execute(query, (
-            r_id, lat, lng, img, tags, 
+            r_id, lat, lng, db_image_path, tags, 
             dept, priority, votes, status, now_str, now_str, rep_email, rep_name
         ))
         
