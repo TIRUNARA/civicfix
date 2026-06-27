@@ -1,11 +1,95 @@
 import sqlite3
 import os
 
+def sqlite_to_postgres_query(query: str) -> str:
+    result = []
+    in_single_quote = False
+    in_double_quote = False
+    escape = False
+    for char in query:
+        if escape:
+            result.append(char)
+            escape = False
+        elif char == '\\':
+            result.append(char)
+            escape = True
+        elif char == "'" and not in_double_quote:
+            in_single_quote = not in_single_quote
+            result.append(char)
+        elif char == '"' and not in_single_quote:
+            in_double_quote = not in_double_quote
+            result.append(char)
+        elif char == '?' and not in_single_quote and not in_double_quote:
+            result.append('%s')
+        else:
+            result.append(char)
+    return "".join(result)
+
+class CursorWrapper:
+    def __init__(self, cursor, is_pg):
+        self.cursor = cursor
+        self.is_pg = is_pg
+
+    @property
+    def description(self):
+        return self.cursor.description
+
+    def execute(self, query, params=()):
+        if self.is_pg:
+            query = sqlite_to_postgres_query(query)
+            if "INSERT OR IGNORE" in query:
+                query = query.replace("INSERT OR IGNORE INTO", "INSERT INTO")
+                if "leaderboard" in query.lower() and "on conflict" not in query.lower():
+                    query += " ON CONFLICT (email) DO NOTHING"
+        self.cursor.execute(query, params)
+
+    def fetchone(self):
+        row = self.cursor.fetchone()
+        if not row:
+            return None
+        if self.is_pg:
+            columns = [desc[0] for desc in self.cursor.description]
+            return dict(zip(columns, row))
+        return row
+
+    def fetchall(self):
+        rows = self.cursor.fetchall()
+        if self.is_pg:
+            columns = [desc[0] for desc in self.cursor.description]
+            return [dict(zip(columns, row)) for row in rows]
+        return rows
+
+    def close(self):
+        self.cursor.close()
+
+class ConnectionWrapper:
+    def __init__(self, conn, is_pg):
+        self.conn = conn
+        self.is_pg = is_pg
+
+    def cursor(self):
+        return CursorWrapper(self.conn.cursor(), self.is_pg)
+
+    def commit(self):
+        self.conn.commit()
+
+    def rollback(self):
+        self.conn.rollback()
+
+    def close(self):
+        self.conn.close()
+
 def get_db():
-    db_path = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "civicfix.db"))
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    return conn
+    db_url = os.environ.get("DATABASE_URL")
+    if db_url and db_url.startswith("postgresql"):
+        import psycopg2
+        conn = psycopg2.connect(db_url)
+        return ConnectionWrapper(conn, is_pg=True)
+    else:
+        db_path = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "civicfix.db"))
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        return ConnectionWrapper(conn, is_pg=False)
 
 def init_db():
     conn = get_db()
@@ -33,15 +117,30 @@ def init_db():
     """)
     
     # Safely migrate reports table by adding missing columns
-    for col_def in [
-        "ALTER TABLE reports ADD COLUMN reporter_email TEXT DEFAULT 'anonymous@civicfix.org'",
-        "ALTER TABLE reports ADD COLUMN reporter_name TEXT DEFAULT 'Anonymous'",
-        "ALTER TABLE reports ADD COLUMN description TEXT"
-    ]:
-        try:
-            cursor.execute(col_def)
-        except sqlite3.OperationalError:
-            pass  # Column already exists
+    if conn.is_pg:
+        # PostgreSQL syntax support
+        for col_name, col_type, default_val in [
+            ("reporter_email", "TEXT", "'anonymous@civicfix.org'"),
+            ("reporter_name", "TEXT", "'Anonymous'"),
+            ("description", "TEXT", "NULL")
+        ]:
+            try:
+                cursor.cursor.execute(f"ALTER TABLE reports ADD COLUMN IF NOT EXISTS {col_name} {col_type} DEFAULT {default_val}")
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+    else:
+        for col_def in [
+            "ALTER TABLE reports ADD COLUMN reporter_email TEXT DEFAULT 'anonymous@civicfix.org'",
+            "ALTER TABLE reports ADD COLUMN reporter_name TEXT DEFAULT 'Anonymous'",
+            "ALTER TABLE reports ADD COLUMN description TEXT"
+        ]:
+            try:
+                cursor.execute(col_def)
+            except sqlite3.OperationalError:
+                pass  # Column already exists
             
     # Create qr_sessions table
     cursor.execute("""
@@ -54,10 +153,19 @@ def init_db():
     )
     """)
     
-    try:
-        cursor.execute("ALTER TABLE qr_sessions ADD COLUMN draft_data TEXT")
-    except sqlite3.OperationalError:
-        pass
+    if conn.is_pg:
+        try:
+            cursor.cursor.execute("ALTER TABLE qr_sessions ADD COLUMN IF NOT EXISTS draft_data TEXT")
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    else:
+        try:
+            cursor.execute("ALTER TABLE qr_sessions ADD COLUMN draft_data TEXT")
+        except sqlite3.OperationalError:
+            pass
     
     # Recreate leaderboard table with email primary key
     cursor.execute("DROP TABLE IF EXISTS leaderboard")
