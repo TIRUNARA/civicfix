@@ -1,95 +1,11 @@
 import sqlite3
 import os
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
-
-def sqlite_to_postgres_query(query: str) -> str:
-    result = []
-    in_single_quote = False
-    in_double_quote = False
-    escape = False
-    i = 0
-    while i < len(query):
-        char = query[i]
-        if escape:
-            result.append(char)
-            escape = False
-        elif char == '\\':
-            result.append(char)
-            escape = True
-        elif char == "'" and not in_double_quote:
-            in_single_quote = not in_single_quote
-            result.append(char)
-        elif char == '"' and not in_single_quote:
-            in_double_quote = not in_double_quote
-            result.append(char)
-        elif char == '?' and not in_single_quote and not in_double_quote:
-            result.append('%s')
-        else:
-            result.append(char)
-        i += 1
-    return "".join(result)
-
-class CursorWrapper:
-    def __init__(self, cursor, is_pg):
-        self.cursor = cursor
-        self.is_pg = is_pg
-
-    def execute(self, query, params=()):
-        if self.is_pg:
-            query = sqlite_to_postgres_query(query)
-            if "INSERT OR IGNORE" in query:
-                query = query.replace("INSERT OR IGNORE INTO leaderboard", "INSERT INTO leaderboard")
-                query += " ON CONFLICT (email) DO NOTHING"
-        self.cursor.execute(query, params)
-
-    def fetchone(self):
-        row = self.cursor.fetchone()
-        if not row:
-            return None
-        if self.is_pg:
-            # Map column names to values to replicate dict-like interface of sqlite3.Row
-            columns = [desc[0] for desc in self.cursor.description]
-            return dict(zip(columns, row))
-        return row
-
-    def fetchall(self):
-        rows = self.cursor.fetchall()
-        if self.is_pg:
-            columns = [desc[0] for desc in self.cursor.description]
-            return [dict(zip(columns, row)) for row in rows]
-        return rows
-
-    def close(self):
-        self.cursor.close()
-
-class ConnectionWrapper:
-    def __init__(self, conn, is_pg):
-        self.conn = conn
-        self.is_pg = is_pg
-
-    def cursor(self):
-        return CursorWrapper(self.conn.cursor(), self.is_pg)
-
-    def commit(self):
-        self.conn.commit()
-
-    def rollback(self):
-        self.conn.rollback()
-
-    def close(self):
-        self.conn.close()
-
 def get_db():
-    if DATABASE_URL:
-        import psycopg2
-        conn = psycopg2.connect(DATABASE_URL)
-        return ConnectionWrapper(conn, is_pg=True)
-    else:
-        db_path = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "civicfix.db"))
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        return ConnectionWrapper(conn, is_pg=False)
+    db_path = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "civicfix.db"))
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 def init_db():
     conn = get_db()
@@ -110,78 +26,41 @@ def init_db():
         status TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        reporter_email TEXT DEFAULT 'anonymous@civicfix.org',
+        reporter_name TEXT DEFAULT 'Anonymous',
         description TEXT
     )
     """)
     
     # Safely migrate reports table by adding missing columns
-    if conn.is_pg:
-        cursor.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS reporter_email TEXT")
-        cursor.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS reporter_name TEXT")
-        cursor.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS description TEXT")
-    else:
+    for col_def in [
+        "ALTER TABLE reports ADD COLUMN reporter_email TEXT DEFAULT 'anonymous@civicfix.org'",
+        "ALTER TABLE reports ADD COLUMN reporter_name TEXT DEFAULT 'Anonymous'",
+        "ALTER TABLE reports ADD COLUMN description TEXT"
+    ]:
         try:
-            cursor.execute("ALTER TABLE reports ADD COLUMN reporter_email TEXT")
-        except Exception:
-            pass
-        try:
-            cursor.execute("ALTER TABLE reports ADD COLUMN reporter_name TEXT")
-        except Exception:
-            pass
-        try:
-            cursor.execute("ALTER TABLE reports ADD COLUMN description TEXT")
-        except Exception:
-            pass
-
+            cursor.execute(col_def)
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+            
     # Create qr_sessions table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS qr_sessions (
         token TEXT PRIMARY KEY,
         status TEXT NOT NULL,
         associated_report_id TEXT,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        draft_data TEXT
     )
     """)
     
-    # Safely migrate qr_sessions by adding draft_data column
-    if conn.is_pg:
-        cursor.execute("ALTER TABLE qr_sessions ADD COLUMN IF NOT EXISTS draft_data TEXT")
-    else:
-        try:
-            cursor.execute("ALTER TABLE qr_sessions ADD COLUMN draft_data TEXT")
-        except Exception:
-            pass
+    try:
+        cursor.execute("ALTER TABLE qr_sessions ADD COLUMN draft_data TEXT")
+    except sqlite3.OperationalError:
+        pass
     
-    # We drop the old leaderboard table if it doesn't have the new layout
-    table_ok = False
-    if conn.is_pg:
-        try:
-            # Query the catalog to see if leaderboard table and email column exist
-            cursor.cursor.execute("""
-                SELECT EXISTS (
-                    SELECT 1 
-                    FROM information_schema.columns 
-                    WHERE table_name = 'leaderboard' AND column_name = 'email'
-                )
-            """)
-            row = cursor.cursor.fetchone()
-            table_ok = row[0] if row else False
-        except Exception:
-            table_ok = False
-            try:
-                conn.conn.rollback()
-            except Exception:
-                pass
-    else:
-        try:
-            cursor.execute("SELECT email FROM leaderboard LIMIT 1")
-            table_ok = True
-        except Exception:
-            table_ok = False
-
-    if not table_ok:
-        cursor.execute("DROP TABLE IF EXISTS leaderboard")
-        
+    # Recreate leaderboard table with email primary key
+    cursor.execute("DROP TABLE IF EXISTS leaderboard")
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS leaderboard (
         email TEXT PRIMARY KEY,
