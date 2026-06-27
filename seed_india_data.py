@@ -164,7 +164,7 @@ def seed_database():
     
     print("🏆 Seeding leaderboard accounts...")
     for email, username, avatar, pts, reports_submitted in delhi_users:
-        if conn.is_pg:
+        if hasattr(conn, "is_pg") and conn.is_pg:
             # Check conflict for postgres
             cursor.execute("SELECT email FROM leaderboard WHERE email = %s", (email,))
             if not cursor.fetchone():
