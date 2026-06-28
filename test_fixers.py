@@ -76,7 +76,12 @@ def test_coordinated_fixer_dispatch_and_hub():
         "end_longitude": 77.5946
     })
     assert r2.status_code == 200
-    assert r2.json()["status"] == "Fixing"
+    assert r2.json()["status"] == "Awaiting Review Approval"
+
+    # Call the new Officer Review Approval gate to trigger fixer dispatch and status = Fixing
+    approve_resp = client.post(f"/api/reports/approve-review/{report_id}")
+    assert approve_resp.status_code == 200
+    assert approve_resp.json()["status"] == "Fixing"
 
     # 3. Verify fixer assignments
     conn = database.get_db()

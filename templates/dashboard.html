@@ -356,6 +356,15 @@
                     </div>
                 </div>
 
+                <!-- Segment 2.5 Officer Review Approval Section -->
+                <div id="modalOfficerReviewApprovalSection" class="hidden space-y-4 border-t border-white/5 pt-4 bg-slate-900/40 p-4 rounded-2xl border border-white/5">
+                    <span class="text-2xs font-semibold text-amber-400 uppercase tracking-wider block">👮 Officer Diagnostic Verification</span>
+                    <p class="text-xs text-slate-300">Review the field inspector's diagnostic data. Once approved, the appropriate ground crew will be dispatched to the site.</p>
+                    <button id="officerApproveReviewBtn" class="w-full bg-[#00E5B0] hover:bg-[#00c294] text-slate-950 text-xs font-bold py-2.5 px-4 rounded-xl transition-all shadow-md">
+                        Approve Diagnostic & Dispatch Ground Crew
+                    </button>
+                </div>
+
                 <!-- Segment 3 Fixer Actions -->
                 <div id="modalFixerActionSection" class="hidden space-y-4 border-t border-white/5 pt-4 bg-slate-900/40 p-4 rounded-2xl border border-white/5">
                     <span class="text-2xs font-semibold text-slate-400 uppercase tracking-wider block">🔧 Ground Crew Workspace</span>
@@ -972,10 +981,12 @@
             document.getElementById("reportsCountLabel").textContent = `${reports.length} reports found`;
 
             reports.forEach(r => {
-                let statusColor = "bg-amber-500/20 text-amber-400";
+                let statusColor = "bg-amber-500/20 text-amber-400 border border-amber-500/30";
                 if (r.status === 'Resolved') statusColor = "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
-                else if (r.status === 'Work in Progress' || r.status === 'Underway') statusColor = "bg-blue-500/20 text-blue-400";
+                else if (['Work in Progress', 'Underway', 'Fixing'].includes(r.status)) statusColor = "bg-blue-500/20 text-blue-400 border border-blue-500/30";
                 else if (r.status === 'Processing') statusColor = "bg-indigo-500/20 text-indigo-300 animate-pulse border border-indigo-500/30";
+                else if (r.status === 'Reviewing') statusColor = "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30";
+                else if (r.status === 'Awaiting Review Approval') statusColor = "bg-orange-500/20 text-orange-400 border border-orange-500/30";
 
                 const tr = document.createElement("tr");
                 tr.className = "hover:bg-white/5 transition-colors cursor-pointer";
@@ -1033,10 +1044,12 @@
             // Render Status badge
             const statusLabel = document.getElementById("modalStatus");
             statusLabel.textContent = r.status;
-            let statusColor = "bg-amber-500/20 text-amber-400";
+            let statusColor = "bg-amber-500/20 text-amber-400 border border-amber-500/30";
             if (r.status === 'Resolved') statusColor = "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
-            else if (r.status === 'Work in Progress' || r.status === 'Underway') statusColor = "bg-blue-500/20 text-blue-400";
+            else if (['Work in Progress', 'Underway', 'Fixing'].includes(r.status)) statusColor = "bg-blue-500/20 text-blue-400 border border-blue-500/30";
             else if (r.status === 'Processing') statusColor = "bg-indigo-500/20 text-indigo-300 animate-pulse border border-indigo-500/30";
+            else if (r.status === 'Reviewing') statusColor = "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30";
+            else if (r.status === 'Awaiting Review Approval') statusColor = "bg-orange-500/20 text-orange-400 border border-orange-500/30";
             statusLabel.className = `inline-block mt-0.5 px-2.5 py-0.5 rounded text-[11px] font-bold ${statusColor}`;
 
             // Tags
@@ -1058,6 +1071,7 @@
             // 1. Reset / hide conditional workflow sections
             document.getElementById("modalApprovalSection").classList.add("hidden");
             document.getElementById("modalReviewerActionSection").classList.add("hidden");
+            document.getElementById("modalOfficerReviewApprovalSection").classList.add("hidden");
             document.getElementById("modalCoordinationChatSection").classList.add("hidden");
             document.getElementById("modalInspectionCardSection").classList.add("hidden");
 
@@ -1236,6 +1250,20 @@
                     });
             }
 
+            // 3.5 Officer Review Approval Section Check
+            if (activeRole === 'officer' && r.status === 'Awaiting Review Approval') {
+                document.getElementById("modalOfficerReviewApprovalSection").classList.remove("hidden");
+                document.getElementById("officerApproveReviewBtn").onclick = () => {
+                    fetch(`/api/reports/approve-review/${r.id}`, {
+                        method: 'POST'
+                    }).then(res => res.json()).then(data => {
+                        showToast("Diagnostic approved. Ground crew dispatched!", "success");
+                        closeDetailModal();
+                        loadDashboardData();
+                    });
+                };
+            }
+
             // 5. Fixer action panel check
             // Only show if the user is a fixer AND the report is in 'Fixing' or 'Work in Progress' status.
             document.getElementById("modalFixerActionSection").classList.add("hidden");
@@ -1312,7 +1340,7 @@
             }
 
             // 4. Coordination Chat Section
-            if (['Reviewing', 'Fixing', 'Resolved'].includes(r.status)) {
+            if (['Reviewing', 'Awaiting Review Approval', 'Fixing', 'Work in Progress', 'Resolved'].includes(r.status)) {
                 document.getElementById("modalCoordinationChatSection").classList.remove("hidden");
                 loadChatMessages(r.id);
                 document.getElementById("chatSendBtn").onclick = () => {
@@ -1340,14 +1368,6 @@
             // Officer resolve action injection
             const footerActions = document.getElementById("modalFooterActions");
             footerActions.innerHTML = `<button onclick="closeDetailModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all">Close</button>`;
-            
-            if (activeRole === 'officer' && r.status !== 'Resolved' && r.status !== 'Processing') {
-                const resolveBtn = document.createElement("button");
-                resolveBtn.className = "bg-accent hover:bg-[#00c294] text-slate-950 px-4 py-2 font-bold rounded-xl text-xs transition-all shadow-md";
-                resolveBtn.textContent = "👮 Verify Resolve (Upload Photo)";
-                resolveBtn.onclick = () => triggerResolveUpload(r.id);
-                footerActions.appendChild(resolveBtn);
-            }
 
             const modal = document.getElementById("detailModal");
             const modalContent = modal.querySelector(".glass-panel");

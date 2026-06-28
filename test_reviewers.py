@@ -122,7 +122,12 @@ def test_dynamic_reviewer_assignment():
         }
     )
     assert rev_resp2.status_code == 200
-    assert rev_resp2.json()["status"] == "Fixing" # Transitions to Fixing (after Fixer Dispatch is triggered)
+    assert rev_resp2.json()["status"] == "Awaiting Review Approval"
+
+    # Call the new Officer Review Approval gate to trigger fixer dispatch and status = Fixing
+    approve_resp = client.post(f"/api/reports/approve-review/{report_id}")
+    assert approve_resp.status_code == 200
+    assert approve_resp.json()["status"] == "Fixing"
 
     # 6. Verify report status and fixer dispatch
     track_resp = client.get(f"/api/reports/track/{report_id}")

@@ -536,6 +536,17 @@ async def get_report_timeline(id: str):
             "epoch": rv["completed_at"] if rv["completed_at"] else "9999-12-31"
         })
         
+    # 4.5 Officer Review Approval Check
+    if len(revs) > 0 and all([rv["status"] == "Completed" or rv["completed_at"] is not None for rv in revs]):
+        is_approved = r["status"] in ["Fixing", "Work in Progress", "Resolved"]
+        events.append({
+            "title": "Officer Diagnostic Verification",
+            "description": "Officer review of field audit: " + ("Approved. Dispatching ground crews." if is_approved else "Awaiting officer dispatch approval."),
+            "timestamp": r["updated_at"] if is_approved else "Awaiting action",
+            "status": "completed" if is_approved else "active",
+            "epoch": r["updated_at"] if is_approved else "9999-12-30"
+        })
+        
     # 5. Fixer dispatches
     cursor.execute("SELECT * FROM fixer_assignments WHERE report_id = ?", (id,))
     fixes = cursor.fetchall()
@@ -1029,11 +1040,18 @@ async def get_reviewer_assignments(report_id: str):
 
 @app.post("/api/reviewer/upload-image")
 async def reviewer_upload_image(image: UploadFile = File(...)):
+    contents = await image.read()
     filename = f"reviewer_{int(time.time())}_{image.filename}"
     filepath = os.path.join(UPLOAD_DIR, filename)
-    with open(filepath, "wb") as f:
-        f.write(await image.read())
-    return {"image_path": f"/uploads/{filename}"}
+    try:
+        async with aiofiles.open(filepath, "wb") as f:
+            await f.write(contents)
+    except Exception as e:
+        print("Fallback save failed (non-blocking):", e)
+        
+    encoded = base64.b64encode(contents).decode("utf-8")
+    base64_url = f"data:image/jpeg;base64,{encoded}"
+    return {"image_path": base64_url}
 
 @app.post("/api/reviewer/submit-analysis")
 async def submit_reviewer_analysis(req: ReviewerAnalysisRequest):
@@ -1062,18 +1080,34 @@ async def submit_reviewer_analysis(req: ReviewerAnalysisRequest):
     all_completed = all([a["status"] == "Completed" for a in all_assignments])
     
     if all_completed and len(all_assignments) > 0:
-        # Transition status to Segment 3
-        cursor.execute("UPDATE reports SET status = 'Fixer Dispatch', updated_at = ? WHERE id = ?", (now_str, req.report_id))
+        # Transition status to Segment 2.5: Awaiting Review Approval
+        cursor.execute("UPDATE reports SET status = 'Awaiting Review Approval', updated_at = ? WHERE id = ?", (now_str, req.report_id))
         conn.commit()
         conn.close()
         
-        # TRIGGER Actual Fixer Dispatch
-        await trigger_fixer_dispatch(req.report_id)
-        return {"status": "Fixing", "message": "All reviews complete. Ground crews dispatched."}
+        return {"status": "Awaiting Review Approval", "message": "All reviews complete. Awaiting officer approval."}
         
     conn.commit()
     conn.close()
     return {"status": "Reviewing", "message": f"Review by {req.reviewer_id} submitted."}
+
+@app.post("/api/reports/approve-review/{id}")
+async def approve_reviewer_report(id: str):
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT status FROM reports WHERE id = ?", (id,))
+    r = cursor.fetchone()
+    if not r:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Report not found")
+    if r["status"] != "Awaiting Review Approval":
+        conn.close()
+        raise HTTPException(status_code=400, detail="Report is not in Awaiting Review Approval state")
+    conn.close()
+    
+    # Dispatch fixers (which will update status to 'Fixing')
+    await trigger_fixer_dispatch(id)
+    return {"status": "Fixing", "message": "Officer approved reviewer diagnostic. Fixers dispatched."}
 
 @app.get("/api/fixer/assignments/{report_id}")
 async def get_fixer_assignments(report_id: str):
