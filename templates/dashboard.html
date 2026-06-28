@@ -75,7 +75,7 @@
             <span class="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">CivicFix</span>
         </div>
         <nav class="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-300">
-            <a href="/" class="text-accent hover:text-white transition-colors">Dashboard</a>
+            <a href="/" id="navDashboard" class="text-accent hover:text-white transition-colors">Dashboard</a>
             <a href="/map" class="hover:text-white transition-colors">Map Explorer</a>
             <a href="/leaderboard" id="navLeaderboard" class="hover:text-white transition-colors">Leaderboard</a>
         </nav>
@@ -86,9 +86,16 @@
             
             <select id="roleToggle" class="bg-slate-900/80 border border-white/10 text-white rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-[#00E5B0] font-semibold cursor-pointer" onchange="toggleRole()">
                 <option value="citizen">Citizen Mode</option>
-                <option value="officer">Officer Portal</option>
-                <option value="reviewer">Reviewer Portal</option>
-                <option value="fixer">Fixer Portal</option>
+                <option value="officer">Officer (All Departments)</option>
+                <option value="officer_road">Officer (Municipal Roads)</option>
+                <option value="officer_water">Officer (Water & Sanitation)</option>
+                <option value="officer_waste">Officer (Solid Waste)</option>
+                <option value="officer_light">Officer (Streetlighting)</option>
+                <option value="reviewer">Reviewer (Rajesh - Roads)</option>
+                <option value="reviewer_water">Reviewer (Priya - Water)</option>
+                <option value="reviewer_waste">Reviewer (Sunil - Waste)</option>
+                <option value="fixer">Fixer (Alpha - Roads)</option>
+                <option value="fixer_water">Fixer (Alpha - Water)</option>
             </select>
 
             <div id="authContainer" class="flex items-center gap-2"></div>
@@ -153,18 +160,27 @@
                         <div class="flex-grow border-t border-white/5"></div>
                     </div>
 
-                    <div class="flex flex-col gap-2 w-full">
-                        <button onclick="triggerMockLogin('citizen')" class="w-full py-2.5 bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 text-[#00E5B0] hover:from-emerald-500/20 hover:to-cyan-500/20 font-bold rounded-xl text-xs transition-all shadow-md active:scale-[0.98]">
-                            🔑 Instant Citizen Demo
+                    <div class="grid grid-cols-2 gap-2 w-full">
+                        <button onclick="triggerMockLogin('citizen')" class="col-span-2 w-full py-2.5 bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 text-[#00E5B0] hover:from-emerald-500/20 hover:to-cyan-500/20 font-bold rounded-xl text-xs transition-all shadow-md active:scale-[0.98]">
+                            🔑 Citizen (Shiva)
                         </button>
-                        <button onclick="triggerMockLogin('officer')" class="w-full py-2.5 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-500/20 text-blue-400 hover:from-blue-500/20 hover:to-indigo-500/20 font-bold rounded-xl text-xs transition-all shadow-md active:scale-[0.98]">
-                            👮 Instant Officer Demo
+                        <button onclick="triggerMockLogin('officer_road')" class="w-full py-2.5 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-500/20 text-blue-400 hover:from-blue-500/20 hover:to-indigo-500/20 font-bold rounded-xl text-xs transition-all shadow-md active:scale-[0.98]">
+                            👮 Officer (Roads)
+                        </button>
+                        <button onclick="triggerMockLogin('officer_water')" class="w-full py-2.5 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-500/20 text-blue-400 hover:from-blue-500/20 hover:to-indigo-500/20 font-bold rounded-xl text-xs transition-all shadow-md active:scale-[0.98]">
+                            👮 Officer (Water)
                         </button>
                         <button onclick="triggerMockLogin('reviewer')" class="w-full py-2.5 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 text-amber-400 hover:from-amber-500/20 hover:to-orange-500/20 font-bold rounded-xl text-xs transition-all shadow-md active:scale-[0.98]">
-                            🔍 Instant Reviewer Demo
+                            🔍 Reviewer (Roads)
+                        </button>
+                        <button onclick="triggerMockLogin('reviewer_water')" class="w-full py-2.5 bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 text-amber-400 hover:from-amber-500/20 hover:to-orange-500/20 font-bold rounded-xl text-xs transition-all shadow-md active:scale-[0.98]">
+                            🔍 Reviewer (Water)
                         </button>
                         <button onclick="triggerMockLogin('fixer')" class="w-full py-2.5 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 text-indigo-400 hover:from-indigo-500/20 hover:to-purple-500/20 font-bold rounded-xl text-xs transition-all shadow-md active:scale-[0.98]">
-                            🔧 Instant Fixer Demo
+                            🔧 Fixer (Roads)
+                        </button>
+                        <button onclick="triggerMockLogin('fixer_water')" class="w-full py-2.5 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 text-indigo-400 hover:from-indigo-500/20 hover:to-purple-500/20 font-bold rounded-xl text-xs transition-all shadow-md active:scale-[0.98]">
+                            🔧 Fixer (Water)
                         </button>
                     </div>
                 </div>
@@ -632,39 +648,83 @@
             window.location.reload();
         }
 
-        function triggerMockLogin(role = 'citizen') {
-            let email, name, avatar, id;
-            if (role === 'officer') {
+        function getUserDetailsForRoleOption(optionVal) {
+            let email, name, avatar, id, role;
+            if (optionVal === 'officer') {
                 email = "officer@civicfix.org";
-                name = "Officer Shiva";
+                name = "Officer Shiva (All)";
                 avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=officershiva`;
                 id = "officer";
-            } else if (role === 'reviewer') {
+                role = "officer";
+            } else if (optionVal === 'officer_road') {
+                email = "road.officer@civicfix.org";
+                name = "Officer Shiva (Roads)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=officerroad`;
+                id = "officer_road";
+                role = "officer";
+            } else if (optionVal === 'officer_water') {
+                email = "water.officer@civicfix.org";
+                name = "Officer Priya (Water)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=officerwater`;
+                id = "officer_water";
+                role = "officer";
+            } else if (optionVal === 'officer_waste') {
+                email = "waste.officer@civicfix.org";
+                name = "Officer Kiran (Waste)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=officerwaste`;
+                id = "officer_waste";
+                role = "officer";
+            } else if (optionVal === 'officer_light') {
+                email = "light.officer@civicfix.org";
+                name = "Officer Deepa (Lights)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=officerlight`;
+                id = "officer_light";
+                role = "officer";
+            } else if (optionVal === 'reviewer') { // Rajesh - Roads
                 email = "inspector.rajesh@civicfix.org";
                 name = "Inspector Rajesh (Roads)";
                 avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=rajesh`;
                 id = "REV-01";
-            } else if (role === 'fixer') {
+                role = "reviewer";
+            } else if (optionVal === 'reviewer_water') { // Priya - Water
+                email = "inspector.priya@civicfix.org";
+                name = "Inspector Priya (Water)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=priya`;
+                id = "REV-03";
+                role = "reviewer";
+            } else if (optionVal === 'reviewer_waste') { // Sunil - Waste
+                email = "inspector.sunil@civicfix.org";
+                name = "Inspector Sunil (Waste)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=sunil`;
+                id = "REV-05";
+                role = "reviewer";
+            } else if (optionVal === 'fixer') { // Alpha - Roads
                 email = "road.alpha@civicfix.org";
                 name = "Road Crew Alpha (Roads)";
                 avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=roadalpha`;
                 id = "FIX-01";
-            } else {
+                role = "fixer";
+            } else if (optionVal === 'fixer_water') { // Alpha - Water
+                email = "sanitation.alpha@civicfix.org";
+                name = "Sanitation Crew Alpha (Water)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=sanitationalpha`;
+                id = "FIX-03";
+                role = "fixer";
+            } else { // citizen
                 email = "shiva@civicfix.org";
                 name = "Shiva (Citizen)";
                 avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=shiva`;
                 id = "citizen";
+                role = "citizen";
             }
-            currentUser = {
-                id: id,
-                email: email,
-                name: name,
-                avatar: avatar,
-                role: role,
-                activeRole: role
-            };
+            return { id, email, name, avatar, role, activeRole: role, roleOption: optionVal };
+        }
+
+        function triggerMockLogin(roleOption = 'citizen') {
+            const details = getUserDetailsForRoleOption(roleOption);
+            currentUser = details;
             localStorage.setItem("user", JSON.stringify(currentUser));
-            showToast(`🔑 Mock ${role} authentication session started!`, "success");
+            showToast(`🔑 Mock ${details.role} session started: ${details.name}!`, "success");
             window.location.reload();
         }
 
@@ -729,9 +789,14 @@
             if (start && currentUser) {
                 dashboardPollingInterval = setInterval(async () => {
                     const email = currentUser.email;
+                    const activeRole = currentUser.activeRole;
                     try {
-                        const isOfficer = currentUser.activeRole === 'officer';
-                        const url = isOfficer ? "/api/reports/list" : `/api/reports/my-reports/${email}`;
+                        let url;
+                        if (activeRole === 'officer' || activeRole === 'reviewer' || activeRole === 'fixer') {
+                            url = `/api/reports/list?role=${activeRole}&email=${encodeURIComponent(email || '')}&user_id=${encodeURIComponent(currentUser.id || '')}`;
+                        } else {
+                            url = `/api/reports/my-reports/${email}`;
+                        }
                         const rResp = await fetch(url);
                         const reports = await rResp.json();
                         activeReports = reports;
@@ -780,9 +845,11 @@
                 
                 // Toggle visibility based on active role
                 const isCitizen = (activeRole === 'citizen');
+                const isStaff = !isCitizen;
                 const reportBtn = document.getElementById("reportHazardBtn");
                 const reportBtnDashboard = document.getElementById("reportHazardBtnDashboard");
                 const navLeaderboard = document.getElementById("navLeaderboard");
+                const navDashboard = document.getElementById("navDashboard");
                 const pointsCard = document.getElementById("pointsCard");
                 const rankCard = document.getElementById("rankCard");
                 const metricsBar = document.getElementById("userMetricsBar");
@@ -791,6 +858,7 @@
                     if (reportBtn) reportBtn.classList.remove("hidden");
                     if (reportBtnDashboard) reportBtnDashboard.classList.remove("hidden");
                     if (navLeaderboard) navLeaderboard.classList.remove("hidden");
+                    if (navDashboard) navDashboard.textContent = "Dashboard";
                     if (pointsCard) pointsCard.classList.remove("hidden");
                     if (rankCard) rankCard.classList.remove("hidden");
                     if (metricsBar) {
@@ -800,6 +868,7 @@
                     if (reportBtn) reportBtn.classList.add("hidden");
                     if (reportBtnDashboard) reportBtnDashboard.classList.add("hidden");
                     if (navLeaderboard) navLeaderboard.classList.add("hidden");
+                    if (navDashboard) navDashboard.textContent = "Task Queue";
                     if (pointsCard) pointsCard.classList.add("hidden");
                     if (rankCard) rankCard.classList.add("hidden");
                     if (metricsBar) {
@@ -818,28 +887,40 @@
                 activeReports = reports;
 
                 // Set metrics
-                const filed = reports.length;
-                const resolved = reports.filter(r => r.status === 'Resolved').length;
-                document.getElementById("userReportsFiled").textContent = filed;
-                document.getElementById("userReportsResolved").textContent = resolved;
+                let filedValue = reports.length;
+                let resolvedValue = reports.filter(r => r.status === 'Resolved').length;
 
                 if (activeRole === 'officer') {
+                    const pendingCount = reports.filter(r => r.status === 'Pending').length;
+                    filedValue = pendingCount;
+                    resolvedValue = reports.length;
+                    
                     document.getElementById("welcomeMsg").textContent = `Welcome, Municipal Officer`;
-                    document.getElementById("welcomeSub").textContent = `Manage and resolve reported issues in your department.`;
-                    document.getElementById("tableTitle").textContent = "All Municipal Reports";
-                    document.getElementById("filedLabel").textContent = "Total System Reports";
-                    document.getElementById("resolvedLabel").textContent = "Total Resolved Hazards";
+                    document.getElementById("welcomeSub").textContent = `Manage approvals and resolve reported issues in your department.`;
+                    document.getElementById("tableTitle").textContent = "Municipal Reports Queue";
+                    document.getElementById("filedLabel").textContent = "Pending Approvals";
+                    document.getElementById("resolvedLabel").textContent = "Total Department Reports";
                 } else if (activeRole === 'reviewer') {
+                    const assignedCount = reports.filter(r => r.status === 'Reviewing').length;
+                    const completedCount = reports.filter(r => ['Fixing', 'Work in Progress', 'Resolved'].includes(r.status)).length;
+                    filedValue = assignedCount;
+                    resolvedValue = completedCount;
+
                     document.getElementById("welcomeMsg").textContent = `Welcome, Field Reviewer`;
                     document.getElementById("welcomeSub").textContent = `Review assigned issues and log on-site diagnostic specs.`;
                     document.getElementById("tableTitle").textContent = "Assigned / Open Field Reviews";
-                    document.getElementById("filedLabel").textContent = "Total Reviews";
+                    document.getElementById("filedLabel").textContent = "Assigned Reviews";
                     document.getElementById("resolvedLabel").textContent = "Completed Reviews";
                 } else if (activeRole === 'fixer') {
+                    const assignedCount = reports.filter(r => ['Fixing', 'Work in Progress'].includes(r.status)).length;
+                    const completedCount = reports.filter(r => r.status === 'Resolved').length;
+                    filedValue = assignedCount;
+                    resolvedValue = completedCount;
+
                     document.getElementById("welcomeMsg").textContent = `Welcome, Ground Crew Fixer`;
                     document.getElementById("welcomeSub").textContent = `Navigate to dispatch sites and upload verified resolution proofs.`;
                     document.getElementById("tableTitle").textContent = "Assigned Resolution Operations";
-                    document.getElementById("filedLabel").textContent = "Total Dispatches";
+                    document.getElementById("filedLabel").textContent = "Assigned Dispatches";
                     document.getElementById("resolvedLabel").textContent = "Resolved Hazards";
                 } else {
                     document.getElementById("welcomeMsg").textContent = `Welcome, Citizen`;
@@ -848,6 +929,9 @@
                     document.getElementById("filedLabel").textContent = "Reports Filed";
                     document.getElementById("resolvedLabel").textContent = "Verified Fixed";
                 }
+
+                document.getElementById("userReportsFiled").textContent = filedValue;
+                document.getElementById("userReportsResolved").textContent = resolvedValue;
 
                 // Load points and rank from leaderboard
                 const lResp = await fetch("/api/leaderboard");
@@ -858,7 +942,7 @@
                     document.getElementById("userPoints").textContent = leaders[myRankIdx].civic_points;
                     document.getElementById("userRank").textContent = `#${myRankIdx + 1}`;
                 } else {
-                    document.getElementById("userPoints").textContent = (isStaff ? 0 : filed * 10 + resolved * 50);
+                    document.getElementById("userPoints").textContent = (isStaff ? 0 : reports.length * 10 + reports.filter(r => r.status === 'Resolved').length * 50);
                     document.getElementById("userRank").textContent = `#--`;
                 }
 
@@ -1392,19 +1476,12 @@
         }
 
         function toggleRole() {
-            const role = document.getElementById("roleToggle").value;
-            if (currentUser) {
-                currentUser.activeRole = role;
-                localStorage.setItem("user", JSON.stringify(currentUser));
-            }
-            const roleNames = {
-                citizen: 'Citizen Mode',
-                officer: 'Municipal Officer',
-                reviewer: 'Field Reviewer',
-                fixer: 'Ground Crew Fixer'
-            };
-            showToast(`🔄 Role switched to: ${roleNames[role] || role}`, "info");
-            loadDashboardData();
+            const roleOption = document.getElementById("roleToggle").value;
+            const details = getUserDetailsForRoleOption(roleOption);
+            currentUser = details;
+            localStorage.setItem("user", JSON.stringify(currentUser));
+            showToast(`🔄 Role switched to: ${details.name}`, "info");
+            window.location.reload();
         }
     </script>
 </body>

@@ -403,10 +403,10 @@ async def list_reports(role: str = "citizen", email: str = None, user_id: str = 
             dept_filter = "Municipal Roads"
         elif "water" in email_lower or "sanit" in email_lower:
             dept_filter = "Water & Sanitation"
-        elif "elect" in email_lower or "light" in email_lower or "power" in email_lower:
-            dept_filter = "Electricity & Power"
+        elif "elect" in email_lower or "light" in email_lower or "power" in email_lower or "street" in email_lower:
+            dept_filter = "Utility Streetlighting"
         elif "garbage" in email_lower or "solid" in email_lower:
-            dept_filter = "Garbage & Waste"
+            dept_filter = "Solid Waste"
         elif "park" in email_lower or "garden" in email_lower:
             dept_filter = "Parks"
         elif "highway" in email_lower or "national" in email_lower:
@@ -982,21 +982,21 @@ async def approve_report(id: str, req: ApproveRequest):
     conn = database.get_db()
     cursor = conn.cursor()
     
-    # 1. Update the approval status for this specific department
     now_str = datetime.now(timezone.utc).isoformat()
-    cursor.execute("""
-        UPDATE report_approvals 
-        SET status = 'Approved', officer_email = ?, approved_at = ?
-        WHERE report_id = ? AND department = ?
-    """, (req.officer_email, now_str, id, req.department))
+    cursor.execute("SELECT 1 FROM report_approvals WHERE report_id = ? AND department = ?", (id, req.department))
+    exists = cursor.fetchone()
     
-    # If record was not present (e.g. ad hoc department), insert it
-    cursor.execute("SELECT changes() as changed")
-    if cursor.fetchone()["changed"] == 0:
+    if not exists:
         cursor.execute("""
             INSERT INTO report_approvals (report_id, department, status, officer_email, approved_at)
             VALUES (?, ?, 'Approved', ?, ?)
         """, (id, req.department, req.officer_email, now_str))
+    else:
+        cursor.execute("""
+            UPDATE report_approvals 
+            SET status = 'Approved', officer_email = ?, approved_at = ?
+            WHERE report_id = ? AND department = ?
+        """, (req.officer_email, now_str, id, req.department))
         
     # 2. Check if all departments for this report have approved
     cursor.execute("SELECT status FROM report_approvals WHERE report_id = ?", (id,))

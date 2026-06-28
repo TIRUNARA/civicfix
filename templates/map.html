@@ -87,7 +87,7 @@
             <span class="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">CivicFix</span>
         </div>
         <nav class="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-300">
-            <a href="/" class="hover:text-white transition-colors">Dashboard</a>
+            <a href="/" id="navDashboard" class="hover:text-white transition-colors">Dashboard</a>
             <a href="/map" class="text-accent hover:text-white transition-colors">Map Explorer</a>
             <a href="/leaderboard" id="navLeaderboard" class="hover:text-white transition-colors">Leaderboard</a>
         </nav>
@@ -98,9 +98,16 @@
             
             <select id="roleToggle" class="bg-slate-900/80 border border-white/10 text-white rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-[#00E5B0] font-semibold cursor-pointer" onchange="toggleRole()">
                 <option value="citizen">Citizen Mode</option>
-                <option value="officer">Officer Portal</option>
-                <option value="reviewer">Reviewer Portal</option>
-                <option value="fixer">Fixer Portal</option>
+                <option value="officer">Officer (All Departments)</option>
+                <option value="officer_road">Officer (Municipal Roads)</option>
+                <option value="officer_water">Officer (Water & Sanitation)</option>
+                <option value="officer_waste">Officer (Solid Waste)</option>
+                <option value="officer_light">Officer (Streetlighting)</option>
+                <option value="reviewer">Reviewer (Rajesh - Roads)</option>
+                <option value="reviewer_water">Reviewer (Priya - Water)</option>
+                <option value="reviewer_waste">Reviewer (Sunil - Waste)</option>
+                <option value="fixer">Fixer (Alpha - Roads)</option>
+                <option value="fixer_water">Fixer (Alpha - Water)</option>
             </select>
 
             <div id="authContainer" class="flex items-center gap-2"></div>
@@ -255,6 +262,14 @@
                         <span class="text-slate-500 font-semibold block uppercase">Date Filed</span>
                         <span class="text-slate-200" id="modalDate">...</span>
                     </div>
+                    <div class="col-span-2 border-t border-white/5 pt-3 flex items-center gap-3">
+                        <img id="modalReporterAvatar" src="" class="w-8 h-8 rounded-full border border-white/10">
+                        <div>
+                            <span class="text-slate-500 font-semibold block uppercase text-[10px]">Reporter</span>
+                            <span class="text-slate-200 font-bold" id="modalReporterName">...</span>
+                            <span class="text-slate-400 text-[11px]" id="modalReporterEmail">...</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="space-y-2">
@@ -265,6 +280,99 @@
                 <div class="space-y-2">
                     <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">Diagnostics Tags</span>
                     <div class="flex flex-wrap gap-1.5" id="modalTags"></div>
+                </div>
+
+                <!-- Reviewer Diagnostic Handover Card for Fixers -->
+                <div id="modalInspectionCardSection" class="hidden space-y-4 border-t border-white/5 pt-4 bg-slate-900/40 p-4 rounded-2xl border border-white/5">
+                    <span class="text-2xs font-semibold text-[#00E5B0] uppercase tracking-wider block">📋 Inspection Diagnostic Spec (Handover)</span>
+                    <div class="space-y-2 text-xs">
+                        <div><span class="text-slate-400">Inspected Coordinates:</span> <span id="handoverCoords" class="text-white font-mono"></span></div>
+                        <div><span class="text-slate-400">Required Materials & Resources:</span> <span id="handoverResources" class="text-white font-semibold"></span></div>
+                        <div id="handoverPhotoContainer" class="hidden mt-2">
+                            <span class="text-slate-400 block mb-1">Diagnostic Site Photo:</span>
+                            <img id="handoverPhoto" src="" class="w-full max-h-48 object-cover rounded-xl border border-white/10 bg-slate-950">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Segment 1 Approval Section -->
+                <div id="modalApprovalSection" class="hidden space-y-3 border-t border-white/5 pt-4">
+                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">Department Approvals</span>
+                    <div id="modalApprovalList" class="flex flex-col gap-2"></div>
+                </div>
+
+                <!-- Segment 2 Reviewer Actions -->
+                <div id="modalReviewerActionSection" class="hidden space-y-4 border-t border-white/5 pt-4 bg-slate-900/40 p-4 rounded-2xl border border-white/5">
+                    <span class="text-2xs font-semibold text-slate-400 uppercase tracking-wider block">Reviewer Field Diagnostic Panel</span>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-2xs text-slate-500 uppercase mb-1">Required Ground Crew Resources</label>
+                            <input type="text" id="reviewerResources" placeholder="e.g. 5x asphalt bags, road roller, street signs" class="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00E5B0]/50">
+                        </div>
+                        <div>
+                            <label class="block text-2xs text-slate-500 uppercase mb-1">Diagnostic Site Photo (Optional)</label>
+                            <input type="file" id="reviewerPhoto" accept="image/*" class="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-400 focus:outline-none focus:border-[#00E5B0]/50 file:mr-4 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-[#00E5B0]/10 file:text-[#00E5B0] hover:file:bg-[#00E5B0]/20 cursor-pointer">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="col-span-2">
+                                <button type="button" onclick="useCurrentReviewerGPS()" class="w-full bg-white/5 border border-white/10 hover:bg-white/10 text-slate-300 text-xs font-bold py-2 rounded-xl transition-all mb-1 flex items-center justify-center gap-1.5">
+                                    📍 Use Current GPS Coordinates
+                                </button>
+                            </div>
+                            <div>
+                                <label class="block text-2xs text-slate-500 uppercase mb-1">Actual Latitude</label>
+                                <input type="number" step="0.000001" id="reviewerLat" class="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00E5B0]/50">
+                            </div>
+                            <div>
+                                <label class="block text-2xs text-slate-500 uppercase mb-1">Actual Longitude</label>
+                                <input type="number" step="0.000001" id="reviewerLng" class="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00E5B0]/50">
+                            </div>
+                        </div>
+                        <button id="submitReviewBtn" class="w-full bg-[#00E5B0] hover:bg-[#00c294] text-slate-950 text-xs font-bold py-2 px-4 rounded-xl transition-all font-semibold">
+                            Complete Diagnostic & Log GPS Location
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Segment 3 Fixer Actions -->
+                <div id="modalFixerActionSection" class="hidden space-y-4 border-t border-white/5 pt-4 bg-slate-900/40 p-4 rounded-2xl border border-white/5">
+                    <span class="text-2xs font-semibold text-slate-400 uppercase tracking-wider block">🔧 Ground Crew Workspace</span>
+                    <div class="space-y-3">
+                        <div class="flex flex-col sm:flex-row gap-2">
+                            <a id="fixerNavigationLink" target="_blank" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-2.5 px-3 rounded-xl transition-all text-center flex items-center justify-center gap-1">
+                                🗺️ Navigate (Google Maps)
+                            </a>
+                            <button id="fixerStartWorkBtn" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold py-2.5 px-3 rounded-xl transition-all">
+                                ⚡ Start Work (In Progress)
+                            </button>
+                        </div>
+                        <div class="border-t border-white/5 pt-3 space-y-2">
+                            <span class="block text-2xs text-slate-500 uppercase">Verify and Submit Resolution Proof</span>
+                            <button id="fixerResolveUploadBtn" class="w-full bg-[#00E5B0] hover:bg-[#00c294] text-slate-950 text-xs font-bold py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md">
+                                📸 Upload Resolution Photo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chronological Progress Timeline UI -->
+                <div class="space-y-3 bg-slate-950/60 p-4 rounded-2xl border border-white/5">
+                    <span class="text-2xs font-semibold text-slate-400 uppercase tracking-wider block">📍 Progress Timeline</span>
+                    <div id="modalTimelineContainer" class="space-y-4 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-white/10 pl-6 text-xs">
+                        <!-- Dynamically populated steps -->
+                    </div>
+                </div>
+
+                <!-- Segment 4 Inter-Departmental Coordination Hub (Chat) -->
+                <div id="modalCoordinationChatSection" class="hidden space-y-3 border-t border-white/5 pt-4">
+                    <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">Inter-Departmental Coordination Hub</span>
+                    <div id="coordinationChatBox" class="bg-slate-950/50 rounded-2xl border border-white/5 p-4 flex flex-col h-48">
+                        <div id="chatMessagesList" class="flex-1 overflow-y-auto space-y-2 text-xs pr-1"></div>
+                        <div class="flex gap-2 mt-3">
+                            <input type="text" id="chatMessageInput" placeholder="Type a secure transmission..." class="flex-1 bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#00E5B0]/50">
+                            <button id="chatSendBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all">Send</button>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="px-6 py-4 border-t border-white/10 flex justify-end gap-3" id="modalFooterActions">
@@ -431,12 +539,25 @@
                 
                 const roleToggle = document.getElementById("roleToggle");
                 const isStaff = (currentUser.role === 'officer' || currentUser.role === 'reviewer' || currentUser.role === 'fixer');
+                
+                const reportBtn = document.getElementById("reportHazardBtn");
+                const navLeaderboard = document.getElementById("navLeaderboard");
+                const navDashboard = document.getElementById("navDashboard");
+                
                 if (isStaff) {
                     roleToggle.classList.remove("hidden");
-                    roleToggle.value = currentUser.activeRole;
+                    roleToggle.value = currentUser.roleOption || currentUser.activeRole;
+                    
+                    if (reportBtn) reportBtn.classList.add("hidden");
+                    if (navLeaderboard) navLeaderboard.classList.add("hidden");
+                    if (navDashboard) navDashboard.textContent = "Task Queue";
                 } else {
                     roleToggle.classList.add("hidden");
                     roleToggle.value = "citizen";
+                    
+                    if (reportBtn) reportBtn.classList.remove("hidden");
+                    if (navLeaderboard) navLeaderboard.classList.remove("hidden");
+                    if (navDashboard) navDashboard.textContent = "Dashboard";
                 }
             } else {
                 document.getElementById("roleToggle").classList.add("hidden");
@@ -738,6 +859,26 @@
             applyFilters();
         }
 
+        let chatInterval = null;
+
+        window.useCurrentReviewerGPS = function() {
+            if (navigator.geolocation) {
+                showToast("Requesting current GPS coordinates...", "info");
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        document.getElementById("reviewerLat").value = pos.coords.latitude.toFixed(6);
+                        document.getElementById("reviewerLng").value = pos.coords.longitude.toFixed(6);
+                        showToast("📍 On-site GPS locked successfully!", "success");
+                    },
+                    (err) => {
+                        showToast("❌ Unable to retrieve GPS location.", "error");
+                    }
+                );
+            } else {
+                showToast("❌ Geolocation not supported by browser.", "error");
+            }
+        };
+
         // Dynamic details lookup exported to window scope
         window.openDetailModal = function(reportId) {
             const r = allReports.find(x => x.id === reportId);
@@ -758,14 +899,21 @@
             document.getElementById("modalDate").textContent = new Date(r.created_at).toLocaleString();
             document.getElementById("modalDesc").textContent = r.description || "No description provided.";
             
+            // Populate reporter details
+            document.getElementById("modalReporterAvatar").src = r.reporter_avatar || 'https://api.dicebear.com/7.x/bottts/svg?seed=anonymous';
+            document.getElementById("modalReporterName").textContent = r.reporter_name || 'Anonymous';
+            document.getElementById("modalReporterEmail").textContent = r.reporter_email || 'anonymous@civicfix.org';
+            
             // Render Status badge
             const statusLabel = document.getElementById("modalStatus");
             statusLabel.textContent = r.status;
-            const color = statusColors[r.status] || '#f59e0b';
-            statusLabel.className = `inline-block mt-0.5 px-2.5 py-0.5 rounded text-[11px] font-bold`;
-            statusLabel.style.backgroundColor = `${color}20`;
-            statusLabel.style.color = color;
-            statusLabel.style.border = `1px solid ${color}30`;
+            let statusColor = "bg-amber-500/20 text-amber-400";
+            if (r.status === 'Resolved') statusColor = "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+            else if (r.status === 'Work in Progress' || r.status === 'Underway') statusColor = "bg-blue-500/20 text-blue-400";
+            else if (r.status === 'Processing') statusColor = "bg-indigo-500/20 text-indigo-300 animate-pulse border border-indigo-500/30";
+            
+            const colorVal = statusColors[r.status] || '#f59e0b';
+            statusLabel.className = `inline-block mt-0.5 px-2.5 py-0.5 rounded text-[11px] font-bold ${statusColor}`;
 
             // Tags
             const tagsBox = document.getElementById("modalTags");
@@ -783,15 +931,292 @@
                 tagsBox.appendChild(badge);
             });
 
-            // Action footer
+            // 1. Reset / hide conditional workflow sections
+            document.getElementById("modalApprovalSection").classList.add("hidden");
+            document.getElementById("modalReviewerActionSection").classList.add("hidden");
+            document.getElementById("modalCoordinationChatSection").classList.add("hidden");
+            document.getElementById("modalInspectionCardSection").classList.add("hidden");
+            document.getElementById("modalFixerActionSection").classList.add("hidden");
+
+            const activeRole = currentUser && currentUser.activeRole;
+
+            // Load Reviewer Diagnostic Handover Card if a completed assignment exists
+            fetch(`/api/reviewer/assignments/${r.id}`)
+                .then(res => res.json())
+                .then(assignments => {
+                    const completedAssignment = assignments.find(a => a.status === 'Completed' || a.completed_at);
+                    const handoverSection = document.getElementById("modalInspectionCardSection");
+                    if (completedAssignment) {
+                        handoverSection.classList.remove("hidden");
+                        document.getElementById("handoverCoords").textContent = `${completedAssignment.end_latitude || 'N/A'}, ${completedAssignment.end_longitude || 'N/A'}`;
+                        document.getElementById("handoverResources").textContent = completedAssignment.resources_logged || "None specified.";
+                        const photoContainer = document.getElementById("handoverPhotoContainer");
+                        const photoImg = document.getElementById("handoverPhoto");
+                        if (completedAssignment.analysis_image) {
+                            photoContainer.classList.remove("hidden");
+                            photoImg.src = completedAssignment.analysis_image;
+                        } else {
+                            photoContainer.classList.add("hidden");
+                        }
+                    }
+                })
+                .catch(err => console.error("Error loading reviewer handover card", err));
+
+            // Load and render chronological progress timeline
+            fetch(`/api/reports/timeline/${r.id}`)
+                .then(res => res.json())
+                .then(timeline => {
+                    const container = document.getElementById("modalTimelineContainer");
+                    container.innerHTML = "";
+                    if (timeline && timeline.length > 0) {
+                        timeline.forEach(event => {
+                            const step = document.createElement("div");
+                            step.className = "relative mb-4 last:mb-0";
+                            
+                            const isCompleted = event.status === "completed";
+                            const dotColor = isCompleted ? "bg-emerald-500 text-slate-950 font-bold" : "bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse font-bold";
+                            const dotIcon = isCompleted ? "✓" : "⚡";
+                            
+                            step.innerHTML = `
+                                <div class="absolute -left-6 top-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${dotColor}">${dotIcon}</div>
+                                <div class="flex flex-col">
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-bold text-slate-200">${event.title}</span>
+                                        <span class="text-3xs text-slate-500">${event.timestamp ? new Date(event.timestamp).toLocaleString() : 'Pending'}</span>
+                                    </div>
+                                    <span class="text-slate-400 text-2xs mt-0.5">${event.description}</span>
+                                </div>
+                            `;
+                            container.appendChild(step);
+                        });
+                    } else {
+                        container.innerHTML = `<span class="text-slate-500 italic">No timeline data available.</span>`;
+                    }
+                })
+                .catch(err => {
+                    console.error("Error loading progress timeline", err);
+                    document.getElementById("modalTimelineContainer").innerHTML = `<span class="text-slate-500 italic">Failed to load timeline.</span>`;
+                });
+
+            // 2. Fetch approvals for this report
+            fetch(`/api/reports/approvals/${r.id}`)
+                .then(res => res.json())
+                .then(approvals => {
+                    if (approvals && approvals.length > 0) {
+                        document.getElementById("modalApprovalSection").classList.remove("hidden");
+                        const listDiv = document.getElementById("modalApprovalList");
+                        listDiv.innerHTML = "";
+                        approvals.forEach(app => {
+                            const row = document.createElement("div");
+                            row.className = "flex items-center justify-between bg-slate-900/40 p-2.5 rounded-xl border border-white/5 text-2xs";
+                            
+                            let badge = `<span class="px-2 py-0.5 rounded font-bold bg-amber-500/10 text-amber-400">Pending Approval</span>`;
+                            if (app.status === 'Approved') {
+                                badge = `<span class="px-2 py-0.5 rounded font-bold bg-emerald-500/10 text-emerald-400">Approved by ${app.officer_email || 'Officer'}</span>`;
+                            }
+                            
+                            row.innerHTML = `
+                                <div class="flex flex-col">
+                                    <span class="font-bold text-slate-300 text-xs">${app.department}</span>
+                                </div>
+                                <div class="flex items-center gap-2 app-badge-container">
+                                    ${badge}
+                                </div>
+                            `;
+
+                            // If officer and pending, allow them to approve
+                            if (activeRole === 'officer' && app.status === 'Pending') {
+                                const btn = document.createElement("button");
+                                btn.className = "bg-accent hover:bg-[#00c294] text-slate-950 font-bold px-3 py-1 rounded-lg transition-all text-2xs";
+                                btn.textContent = "Approve";
+                                btn.onclick = () => {
+                                    fetch(`/api/reports/approve/${r.id}`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            department: app.department,
+                                            officer_email: currentUser.email || 'officer@civicfix.gov'
+                                        })
+                                    }).then(res => res.json()).then(data => {
+                                        showToast(`Approved for ${app.department}`, "success");
+                                        openDetailModal(r.id);
+                                        loadReportsData();
+                                    });
+                                };
+                                row.querySelector(".app-badge-container").appendChild(btn);
+                            }
+                            listDiv.appendChild(row);
+                        });
+                    }
+                });
+
+            // 3. Reviewer action panel check
+            if (activeRole === 'reviewer' && r.status === 'Reviewing') {
+                fetch(`/api/reviewer/assignments/${r.id}`)
+                    .then(res => res.json())
+                    .then(assignments => {
+                        const myAssignment = assignments.find(a => a.reviewer_id === currentUser.id && a.status === 'Assigned');
+                        if (myAssignment) {
+                            document.getElementById("modalReviewerActionSection").classList.remove("hidden");
+                            document.getElementById("reviewerLat").value = r.latitude;
+                            document.getElementById("reviewerLng").value = r.longitude;
+                            
+                            document.getElementById("submitReviewBtn").onclick = async () => {
+                                const resources = document.getElementById("reviewerResources").value;
+                                const latVal = parseFloat(document.getElementById("reviewerLat").value);
+                                const lngVal = parseFloat(document.getElementById("reviewerLng").value);
+                                const photoFile = document.getElementById("reviewerPhoto").files[0];
+                                
+                                let analysis_image_path = null;
+                                if (photoFile) {
+                                    const formData = new FormData();
+                                    formData.append("image", photoFile);
+                                    try {
+                                        const uploadRes = await fetch("/api/reviewer/upload-image", {
+                                            method: "POST",
+                                            body: formData
+                                        });
+                                        if (uploadRes.ok) {
+                                            const uploadData = await uploadRes.json();
+                                            analysis_image_path = uploadData.image_path;
+                                        } else {
+                                            showToast("Failed to upload diagnostic photo", "error");
+                                            return;
+                                        }
+                                    } catch (err) {
+                                        console.error("Upload error:", err);
+                                        showToast("Failed to upload diagnostic photo", "error");
+                                        return;
+                                    }
+                                }
+                                
+                                fetch(`/api/reviewer/submit-analysis`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        report_id: r.id,
+                                        reviewer_id: currentUser.id,
+                                        resources_logged: resources,
+                                        end_latitude: latVal,
+                                        end_longitude: lngVal,
+                                        analysis_image: analysis_image_path
+                                    })
+                                }).then(res => res.json()).then(data => {
+                                    showToast("Diagnostic completed and GPS logged!", "success");
+                                    closeDetailModal();
+                                    loadReportsData();
+                                });
+                            };
+                        }
+                    });
+            }
+
+            // 5. Fixer action panel check
+            document.getElementById("modalFixerActionSection").classList.add("hidden");
+            if (activeRole === 'fixer' && ['Fixing', 'Work in Progress'].includes(r.status)) {
+                fetch(`/api/fixer/assignments/${r.id}`)
+                    .then(res => res.json())
+                    .then(assignments => {
+                        const myAssignment = assignments.find(a => a.fixer_id === currentUser.id);
+                        if (myAssignment) {
+                            document.getElementById("modalFixerActionSection").classList.remove("hidden");
+                            document.getElementById("fixerNavigationLink").href = `https://www.google.com/maps/search/?api=1&query=${r.latitude},${r.longitude}`;
+
+                            const startBtn = document.getElementById("fixerStartWorkBtn");
+                            if (myAssignment.status === 'Work in Progress' || r.status === 'Work in Progress') {
+                                startBtn.textContent = "⚡ In Progress";
+                                startBtn.disabled = true;
+                                startBtn.className = "flex-1 bg-blue-500/30 text-blue-300 text-xs font-bold py-2.5 px-3 rounded-xl cursor-not-allowed";
+                            } else {
+                                startBtn.textContent = "⚡ Start Work (In Progress)";
+                                startBtn.disabled = false;
+                                startBtn.className = "flex-1 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold py-2.5 px-3 rounded-xl transition-all";
+                                startBtn.onclick = () => {
+                                    fetch(`/api/fixer/start-work`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            report_id: r.id,
+                                            fixer_id: currentUser.id
+                                        })
+                                    }).then(res => res.json()).then(data => {
+                                        showToast("Work started! Status updated to In Progress.", "success");
+                                        openDetailModal(r.id);
+                                        loadReportsData();
+                                    });
+                                };
+                            }
+
+                            // Upload proof button
+                            document.getElementById("fixerResolveUploadBtn").onclick = () => {
+                                const input = document.createElement("input");
+                                input.type = "file";
+                                input.accept = "image/*";
+                                input.onchange = async () => {
+                                    const file = input.files[0];
+                                    if (!file) return;
+
+                                    showToast("Uploading and verifying resolution with AI Vision...", "info");
+                                    const formData = new FormData();
+                                    formData.append("resolved_image", file);
+
+                                    try {
+                                        const resp = await fetch(`/api/reports/resolve/${r.id}`, {
+                                            method: "POST",
+                                            body: formData
+                                        });
+                                        const result = await resp.json();
+                                        if (result.verified) {
+                                            showToast("✅ AI Verified Resolution: " + result.explanation, "success");
+                                            closeDetailModal();
+                                            loadReportsData();
+                                        } else {
+                                            showToast("❌ Verification Failed: " + result.explanation, "error");
+                                        }
+                                    } catch(e) {
+                                        showToast("❌ Network error verifying resolution.", "error");
+                                    }
+                                };
+                                input.click();
+                            };
+                        }
+                    });
+            }
+
+            // 4. Coordination Chat Section
+            if (['Reviewing', 'Fixing', 'Resolved'].includes(r.status)) {
+                document.getElementById("modalCoordinationChatSection").classList.remove("hidden");
+                loadChatMessages(r.id);
+                document.getElementById("chatSendBtn").onclick = () => {
+                    const input = document.getElementById("chatMessageInput");
+                    const text = input.value.trim();
+                    if (!text) return;
+                    
+                    fetch(`/api/coordination/send-message`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            report_id: r.id,
+                            sender_id: currentUser.id || currentUser.email,
+                            sender_name: currentUser.name || "Staff",
+                            sender_role: activeRole,
+                            message: text
+                        })
+                    }).then(res => res.json()).then(() => {
+                        input.value = "";
+                        loadChatMessages(r.id);
+                    });
+                };
+            }
+
+            // Officer resolve action injection
             const footerActions = document.getElementById("modalFooterActions");
-            const role = document.getElementById("roleToggle").value;
             footerActions.innerHTML = `<button onclick="closeDetailModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all">Close</button>`;
             
-            if (role === 'officer' && r.status !== 'Resolved' && r.status !== 'Processing') {
+            if (activeRole === 'officer' && r.status !== 'Resolved' && r.status !== 'Processing') {
                 const resolveBtn = document.createElement("button");
                 resolveBtn.className = "bg-accent hover:bg-[#00c294] text-slate-950 px-4 py-2 font-bold rounded-xl text-xs transition-all shadow-md";
-                resolveBtn.textContent = "👮 Verify Resolve";
+                resolveBtn.textContent = "👮 Verify Resolve (Upload Photo)";
                 resolveBtn.onclick = () => triggerResolveUpload(r.id);
                 footerActions.appendChild(resolveBtn);
             }
@@ -809,6 +1234,11 @@
         };
 
         window.closeDetailModal = function() {
+            if (chatInterval) {
+                clearInterval(chatInterval);
+                chatInterval = null;
+            }
+
             const modal = document.getElementById("detailModal");
             const modalContent = modal.querySelector(".glass-panel");
             
@@ -820,6 +1250,45 @@
                 modal.classList.add("opacity-0", "pointer-events-none");
             }, 300);
         };
+
+        function loadChatMessages(reportId) {
+            if (chatInterval) clearInterval(chatInterval);
+            
+            const fetchChat = () => {
+                fetch(`/api/coordination/get-messages/${reportId}`)
+                    .then(res => res.json())
+                    .then(messages => {
+                        const list = document.getElementById("chatMessagesList");
+                        list.innerHTML = "";
+                        if (messages.length === 0) {
+                            list.innerHTML = `<div class="text-slate-500 italic text-[11px] text-center mt-4">No transmissions logged yet.</div>`;
+                            return;
+                        }
+                        messages.forEach(msg => {
+                            const div = document.createElement("div");
+                            div.className = "bg-white/5 border border-white/5 rounded-xl p-2 space-y-1";
+                            
+                            let roleBadgeColor = "bg-blue-500/10 text-blue-400";
+                            if (msg.sender_role === 'officer') roleBadgeColor = "bg-emerald-500/10 text-emerald-400";
+                            else if (msg.sender_role === 'reviewer') roleBadgeColor = "bg-amber-500/10 text-amber-400";
+                            else if (msg.sender_role === 'fixer') roleBadgeColor = "bg-indigo-500/10 text-indigo-400";
+                            
+                            div.innerHTML = `
+                                <div class="flex items-center justify-between text-[10px]">
+                                    <span class="font-bold text-slate-300">${msg.sender_name}</span>
+                                    <span class="px-1.5 py-0.5 rounded font-bold uppercase tracking-wider scale-90 ${roleBadgeColor}">${msg.sender_role}</span>
+                                </div>
+                                <p class="text-slate-200 mt-0.5 text-xs">${msg.message}</p>
+                            `;
+                            list.appendChild(div);
+                        });
+                        list.scrollTop = list.scrollHeight;
+                    });
+            };
+            
+            fetchChat();
+            chatInterval = setInterval(fetchChat, 3000);
+        }
 
         async function triggerResolveUpload(reportId) {
             const input = document.createElement("input");
@@ -872,20 +1341,85 @@
             }, 4000);
         }
 
-        function toggleRole() {
-            const role = document.getElementById("roleToggle").value;
-            if (currentUser) {
-                currentUser.activeRole = role;
-                localStorage.setItem("user", JSON.stringify(currentUser));
+        function getUserDetailsForRoleOption(optionVal) {
+            let email, name, avatar, id, role;
+            if (optionVal === 'officer') {
+                email = "officer@civicfix.org";
+                name = "Officer Shiva (All)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=officershiva`;
+                id = "officer";
+                role = "officer";
+            } else if (optionVal === 'officer_road') {
+                email = "road.officer@civicfix.org";
+                name = "Officer Shiva (Roads)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=officerroad`;
+                id = "officer_road";
+                role = "officer";
+            } else if (optionVal === 'officer_water') {
+                email = "water.officer@civicfix.org";
+                name = "Officer Priya (Water)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=officerwater`;
+                id = "officer_water";
+                role = "officer";
+            } else if (optionVal === 'officer_waste') {
+                email = "waste.officer@civicfix.org";
+                name = "Officer Kiran (Waste)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=officerwaste`;
+                id = "officer_waste";
+                role = "officer";
+            } else if (optionVal === 'officer_light') {
+                email = "light.officer@civicfix.org";
+                name = "Officer Deepa (Lights)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=officerlight`;
+                id = "officer_light";
+                role = "officer";
+            } else if (optionVal === 'reviewer') { // Rajesh - Roads
+                email = "inspector.rajesh@civicfix.org";
+                name = "Inspector Rajesh (Roads)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=rajesh`;
+                id = "REV-01";
+                role = "reviewer";
+            } else if (optionVal === 'reviewer_water') { // Priya - Water
+                email = "inspector.priya@civicfix.org";
+                name = "Inspector Priya (Water)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=priya`;
+                id = "REV-03";
+                role = "reviewer";
+            } else if (optionVal === 'reviewer_waste') { // Sunil - Waste
+                email = "inspector.sunil@civicfix.org";
+                name = "Inspector Sunil (Waste)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=sunil`;
+                id = "REV-05";
+                role = "reviewer";
+            } else if (optionVal === 'fixer') { // Alpha - Roads
+                email = "road.alpha@civicfix.org";
+                name = "Road Crew Alpha (Roads)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=roadalpha`;
+                id = "FIX-01";
+                role = "fixer";
+            } else if (optionVal === 'fixer_water') { // Alpha - Water
+                email = "sanitation.alpha@civicfix.org";
+                name = "Sanitation Crew Alpha (Water)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=sanitationalpha`;
+                id = "FIX-03";
+                role = "fixer";
+            } else { // citizen
+                email = "shiva@civicfix.org";
+                name = "Shiva (Citizen)";
+                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=shiva`;
+                id = "citizen";
+                role = "citizen";
             }
-            const roleNames = {
-                citizen: 'Citizen Mode',
-                officer: 'Municipal Officer',
-                reviewer: 'Field Reviewer',
-                fixer: 'Ground Crew Fixer'
-            };
-            showToast(`🔄 Role switched to: ${roleNames[role] || role}`, "info");
-            loadReportsData();
+            return { id, email, name, avatar, role, activeRole: role, roleOption: optionVal };
+        }
+
+        function toggleRole() {
+            const roleOption = document.getElementById("roleToggle").value;
+            const details = getUserDetailsForRoleOption(roleOption);
+            currentUser = details;
+            localStorage.setItem("user", JSON.stringify(currentUser));
+            showToast(`🔄 Role switched to: ${details.name}`, "info");
+            window.location.reload();
         }
     </script>
 </body>
