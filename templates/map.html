@@ -296,7 +296,7 @@
                     </div>
                 </div>
 
-                <div class="space-y-2">
+                <div id="modalAiReportSection" class="space-y-2">
                     <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">AI Diagnostic Report</span>
                     <p class="text-slate-300 text-sm leading-relaxed p-4 bg-slate-900/60 rounded-2xl border border-white/5" id="modalDesc">...</p>
                 </div>
@@ -936,8 +936,16 @@
 
         // Dynamic details lookup exported to window scope
         window.openDetailModal = function(reportId) {
-            const r = allReports.find(x => x.id === reportId);
-            if (!r) return;
+            fetch(`/api/reports/track/${reportId}`)
+                .then(res => {
+                    if (!res.ok) throw new Error("Failed to fetch report details");
+                    return res.json();
+                })
+                .then(r => {
+                    const idx = allReports.findIndex(x => x.id === reportId);
+                    if (idx !== -1) {
+                        allReports[idx] = r;
+                    }
 
             document.getElementById("modalTitle").textContent = `Report Details - ${r.id}`;
             renderImageCarousel("beforeCarouselContainer", r.image_path, "Before");
@@ -964,6 +972,15 @@
             
             document.getElementById("modalDate").textContent = new Date(r.created_at).toLocaleString();
             document.getElementById("modalDesc").textContent = r.description || "No description provided.";
+
+            const modalAiReportSection = document.getElementById("modalAiReportSection");
+            if (modalAiReportSection) {
+                if (isCitizen) {
+                    modalAiReportSection.classList.add("hidden");
+                } else {
+                    modalAiReportSection.classList.remove("hidden");
+                }
+            }
             
             // Populate reporter details
             document.getElementById("modalReporterAvatar").src = r.reporter_avatar || 'https://api.dicebear.com/7.x/bottts/svg?seed=anonymous';
@@ -1019,7 +1036,8 @@
             document.getElementById("aiSummaryContentContainer").classList.add("hidden");
             document.getElementById("aiSummaryMarkdown").textContent = "";
 
-            const activeRole = currentUser && currentUser.activeRole;
+            const roleOption = document.getElementById("roleToggle").value;
+            const activeRole = getUserDetailsForRoleOption(roleOption).role;
 
             // Load Reviewer Diagnostic Handover Card if a completed assignment exists
             fetch(`/api/reviewer/assignments/${r.id}`)
@@ -1043,7 +1061,7 @@
 
                     // Setup AI Resource and Diagnostic Summary logic
                     const aiSummarySection = document.getElementById("modalAiSummarySection");
-                    if (assignments && assignments.length > 0) {
+                    if (activeRole === 'officer' && r.status === 'Awaiting Review Approval' && assignments && assignments.length > 0) {
                         aiSummarySection.classList.remove("hidden");
                         const generateBtn = document.getElementById("generateAiSummaryBtn");
                         const summaryContent = document.getElementById("aiSummaryContentContainer");
@@ -1054,7 +1072,7 @@
                             generateBtn.disabled = true;
                             generateBtn.textContent = "⏳ Analyzing & Generating summary...";
                             
-                            fetch(`/api/reports/reviewer-summary/${r.id}`)
+                            fetch(`/api/reports/reviewer-summary/${r.id}?role=${activeRole}`)
                                 .then(res => res.json())
                                 .then(data => {
                                     generateBtn.disabled = false;
@@ -1151,24 +1169,50 @@
 
                             // If officer and pending, allow them to approve
                             if (activeRole === 'officer' && app.status === 'Pending') {
-                                const btn = document.createElement("button");
-                                btn.className = "bg-accent hover:bg-[#00c294] text-slate-950 font-bold px-3 py-1 rounded-lg transition-all text-2xs";
-                                btn.textContent = "Approve";
-                                btn.onclick = () => {
+                                const btnContainer = document.createElement("div");
+                                btnContainer.className = "flex items-center gap-1.5";
+
+                                const routeReviewerBtn = document.createElement("button");
+                                routeReviewerBtn.className = "bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-bold px-2 py-1 rounded-lg transition-all text-3xs border border-cyan-500/30";
+                                routeReviewerBtn.textContent = "Route to Reviewer";
+                                routeReviewerBtn.onclick = () => {
                                     fetch(`/api/reports/approve/${r.id}`, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({
                                             department: app.department,
-                                            officer_email: currentUser.email || 'officer@civicfix.gov'
+                                            officer_email: currentUser.email || 'officer@civicfix.gov',
+                                            bypass_reviewer: false
                                         })
                                     }).then(res => res.json()).then(data => {
-                                        showToast(`Approved for ${app.department}`, "success");
+                                        showToast(`Approved & Routed to Reviewer for ${app.department}`, "success");
                                         openDetailModal(r.id);
                                         loadReportsData();
                                     });
                                 };
-                                row.querySelector(".app-badge-container").appendChild(btn);
+
+                                const directDispatchBtn = document.createElement("button");
+                                directDispatchBtn.className = "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold px-2 py-1 rounded-lg transition-all text-3xs border border-amber-500/30";
+                                directDispatchBtn.textContent = "Bypass to Fixer ⚡";
+                                directDispatchBtn.onclick = () => {
+                                    fetch(`/api/reports/approve/${r.id}`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            department: app.department,
+                                            officer_email: currentUser.email || 'officer@civicfix.gov',
+                                            bypass_reviewer: true
+                                        })
+                                    }).then(res => res.json()).then(data => {
+                                        showToast(`Approved & Dispatched Directly to Fixer for ${app.department}`, "success");
+                                        openDetailModal(r.id);
+                                        loadReportsData();
+                                    });
+                                };
+
+                                btnContainer.appendChild(routeReviewerBtn);
+                                btnContainer.appendChild(directDispatchBtn);
+                                row.querySelector(".app-badge-container").appendChild(btnContainer);
                             }
                             listDiv.appendChild(row);
                         });
@@ -1362,6 +1406,11 @@
                 modalContent.classList.remove("scale-95", "translate-y-4", "opacity-0");
                 modalContent.classList.add("scale-100", "translate-y-0", "opacity-100");
             }, 10);
+                })
+                .catch(err => {
+                    console.error("Error loading report details:", err);
+                    showToast("Could not load report details", "error");
+                });
         };
 
         window.closeDetailModal = function() {

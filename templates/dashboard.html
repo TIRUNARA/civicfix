@@ -1050,8 +1050,16 @@
 
         // Modal triggers
         function openDetailModal(reportId) {
-            const r = activeReports.find(x => x.id === reportId);
-            if (!r) return;
+            fetch(`/api/reports/track/${reportId}`)
+                .then(res => {
+                    if (!res.ok) throw new Error("Failed to fetch report details");
+                    return res.json();
+                })
+                .then(r => {
+                    const idx = activeReports.findIndex(x => x.id === reportId);
+                    if (idx !== -1) {
+                        activeReports[idx] = r;
+                    }
 
             document.getElementById("modalTitle").textContent = `Report Details - ${r.id}`;
             renderImageCarousel("beforeCarouselContainer", r.image_path, "Before");
@@ -1518,6 +1526,11 @@
                 modalContent.classList.remove("scale-95", "translate-y-4", "opacity-0");
                 modalContent.classList.add("scale-100", "translate-y-0", "opacity-100");
             }, 10);
+                })
+                .catch(err => {
+                    console.error("Error loading report details:", err);
+                    showToast("Could not load report details", "error");
+                });
         }
 
         function closeDetailModal() {
