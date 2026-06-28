@@ -179,6 +179,95 @@ def init_db():
     )
     """)
     
+    # Safely migrate reports table by adding is_coordinated column
+    if conn.is_pg:
+        try:
+            cursor.cursor.execute("ALTER TABLE reports ADD COLUMN IF NOT EXISTS is_coordinated INTEGER DEFAULT 0")
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    else:
+        try:
+            cursor.execute("ALTER TABLE reports ADD COLUMN is_coordinated INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+            
+    # Create report_approvals table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS report_approvals (
+        report_id TEXT NOT NULL,
+        department TEXT NOT NULL,
+        status TEXT NOT NULL,
+        officer_email TEXT,
+        approved_at TEXT,
+        PRIMARY KEY (report_id, department)
+    )
+    """)
+    
+    # Create reviewers table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS reviewers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        department TEXT NOT NULL,
+        latitude REAL NOT NULL,
+        longitude REAL NOT NULL,
+        is_available INTEGER DEFAULT 1
+    )
+    """)
+    
+    # Create reviewer_assignments table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS reviewer_assignments (
+        report_id TEXT NOT NULL,
+        reviewer_id TEXT NOT NULL,
+        department TEXT NOT NULL,
+        status TEXT NOT NULL,
+        resources_logged TEXT,
+        completed_at TEXT,
+        end_latitude REAL,
+        end_longitude REAL,
+        PRIMARY KEY (report_id, reviewer_id)
+    )
+    """)
+    
+    # Create fixers table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS fixers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        department TEXT NOT NULL,
+        is_available INTEGER DEFAULT 1
+    )
+    """)
+    
+    # Create fixer_assignments table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS fixer_assignments (
+        report_id TEXT NOT NULL,
+        fixer_id TEXT NOT NULL,
+        department TEXT NOT NULL,
+        status TEXT NOT NULL,
+        completed_at TEXT,
+        PRIMARY KEY (report_id, fixer_id)
+    )
+    """)
+    
+    # Create coordination_messages table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS coordination_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        report_id TEXT NOT NULL,
+        sender_id TEXT NOT NULL,
+        sender_name TEXT NOT NULL,
+        sender_role TEXT NOT NULL,
+        message TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )
+    """)
+    
     conn.commit()
     conn.close()
 
