@@ -42,8 +42,8 @@ class CursorWrapper:
             query = re.sub(r'\bAUTOINCREMENT\b', '', query, flags=re.IGNORECASE)
             if "INSERT OR IGNORE" in query:
                 query = query.replace("INSERT OR IGNORE INTO", "INSERT INTO")
-                if "leaderboard" in query.lower() and "on conflict" not in query.lower():
-                    query += " ON CONFLICT (email) DO NOTHING"
+                if "on conflict" not in query.lower():
+                    query += " ON CONFLICT DO NOTHING"
         self.cursor.execute(query, params)
 
     def fetchone(self):
