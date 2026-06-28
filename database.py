@@ -232,9 +232,25 @@ def init_db():
         completed_at TEXT,
         end_latitude REAL,
         end_longitude REAL,
+        analysis_image TEXT,
         PRIMARY KEY (report_id, reviewer_id)
     )
     """)
+
+    # Migrate reviewer_assignments table by adding analysis_image column
+    if conn.is_pg:
+        try:
+            cursor.cursor.execute("ALTER TABLE reviewer_assignments ADD COLUMN IF NOT EXISTS analysis_image TEXT")
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    else:
+        try:
+            cursor.execute("ALTER TABLE reviewer_assignments ADD COLUMN analysis_image TEXT")
+        except sqlite3.OperationalError:
+            pass
     
     # Create fixers table
     cursor.execute("""

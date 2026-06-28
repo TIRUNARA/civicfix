@@ -299,6 +299,10 @@
                     <div class="space-y-2 text-xs">
                         <div><span class="text-slate-400">Inspected Coordinates:</span> <span id="handoverCoords" class="text-white font-mono"></span></div>
                         <div><span class="text-slate-400">Required Materials & Resources:</span> <span id="handoverResources" class="text-white font-semibold"></span></div>
+                        <div id="handoverPhotoContainer" class="hidden mt-2">
+                            <span class="text-slate-400 block mb-1">Diagnostic Site Photo:</span>
+                            <img id="handoverPhoto" src="" class="w-full max-h-48 object-cover rounded-xl border border-white/10 bg-slate-950">
+                        </div>
                     </div>
                 </div>
 
@@ -315,6 +319,10 @@
                         <div>
                             <label class="block text-2xs text-slate-500 uppercase mb-1">Required Ground Crew Resources</label>
                             <input type="text" id="reviewerResources" placeholder="e.g. 5x asphalt bags, road roller, street signs" class="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#00E5B0]/50">
+                        </div>
+                        <div>
+                            <label class="block text-2xs text-slate-500 uppercase mb-1">Diagnostic Site Photo (Optional)</label>
+                            <input type="file" id="reviewerPhoto" accept="image/*" class="w-full bg-slate-950/80 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-400 focus:outline-none focus:border-[#00E5B0]/50 file:mr-4 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-[#00E5B0]/10 file:text-[#00E5B0] hover:file:bg-[#00E5B0]/20 cursor-pointer">
                         </div>
                         <div class="grid grid-cols-2 gap-3">
                             <div>
@@ -981,6 +989,14 @@
                         handoverSection.classList.remove("hidden");
                         document.getElementById("handoverCoords").textContent = `${completedAssignment.end_latitude || 'N/A'}, ${completedAssignment.end_longitude || 'N/A'}`;
                         document.getElementById("handoverResources").textContent = completedAssignment.resources_logged || "None specified.";
+                        const photoContainer = document.getElementById("handoverPhotoContainer");
+                        const photoImg = document.getElementById("handoverPhoto");
+                        if (completedAssignment.analysis_image) {
+                            photoContainer.classList.remove("hidden");
+                            photoImg.src = completedAssignment.analysis_image;
+                        } else {
+                            photoContainer.classList.add("hidden");
+                        }
                     }
                 })
                 .catch(err => console.error("Error loading reviewer handover card", err));
@@ -1086,10 +1102,34 @@
                             document.getElementById("reviewerLat").value = r.latitude;
                             document.getElementById("reviewerLng").value = r.longitude;
                             
-                            document.getElementById("submitReviewBtn").onclick = () => {
+                            document.getElementById("submitReviewBtn").onclick = async () => {
                                 const resources = document.getElementById("reviewerResources").value;
                                 const latVal = parseFloat(document.getElementById("reviewerLat").value);
                                 const lngVal = parseFloat(document.getElementById("reviewerLng").value);
+                                const photoFile = document.getElementById("reviewerPhoto").files[0];
+                                
+                                let analysis_image_path = null;
+                                if (photoFile) {
+                                    const formData = new FormData();
+                                    formData.append("image", photoFile);
+                                    try {
+                                        const uploadRes = await fetch("/api/reviewer/upload-image", {
+                                            method: "POST",
+                                            body: formData
+                                        });
+                                        if (uploadRes.ok) {
+                                            const uploadData = await uploadRes.json();
+                                            analysis_image_path = uploadData.image_path;
+                                        } else {
+                                            showToast("Failed to upload diagnostic photo", "error");
+                                            return;
+                                        }
+                                    } catch (err) {
+                                        console.error("Upload error:", err);
+                                        showToast("Failed to upload diagnostic photo", "error");
+                                        return;
+                                    }
+                                }
                                 
                                 fetch(`/api/reviewer/submit-analysis`, {
                                     method: 'POST',
@@ -1099,7 +1139,8 @@
                                         reviewer_id: currentUser.id,
                                         resources_logged: resources,
                                         end_latitude: latVal,
-                                        end_longitude: lngVal
+                                        end_longitude: lngVal,
+                                        analysis_image: analysis_image_path
                                     })
                                 }).then(res => res.json()).then(data => {
                                     showToast("Diagnostic completed and GPS logged!", "success");

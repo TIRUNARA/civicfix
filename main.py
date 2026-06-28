@@ -407,27 +407,59 @@ async def list_reports(role: str = "citizen", email: str = None, user_id: str = 
             dept_filter = "Electricity & Power"
         elif "garbage" in email_lower or "solid" in email_lower:
             dept_filter = "Garbage & Waste"
+        elif "park" in email_lower or "garden" in email_lower:
+            dept_filter = "Parks"
+        elif "highway" in email_lower or "national" in email_lower:
+            dept_filter = "National Highways"
+        elif "grid" in email_lower or "state" in email_lower:
+            dept_filter = "State Grid"
+        elif "environ" in email_lower:
+            dept_filter = "Environment Board"
 
-    if role == "officer" or role == "citizen":
+    if role == "citizen":
         cursor.execute("SELECT * FROM reports ORDER BY created_at DESC")
         rows = cursor.fetchall()
+    elif role == "officer":
+        if dept_filter:
+            cursor.execute(
+                "SELECT * FROM reports WHERE department LIKE ? ORDER BY created_at DESC",
+                (f"%{dept_filter}%",)
+            )
+        else:
+            # Fallback: officer without recognizable dept keyword — show all
+            cursor.execute("SELECT * FROM reports ORDER BY created_at DESC")
+        rows = cursor.fetchall()
     elif role == "reviewer":
-        cursor.execute("""
-            SELECT DISTINCT r.* FROM reports r
-            LEFT JOIN reviewer_assignments ra ON r.id = ra.report_id
-            WHERE ra.reviewer_id = ? OR 
-                  (? IS NOT NULL AND r.department LIKE ?)
-            ORDER BY r.created_at DESC
-        """, (user_id, dept_filter, f"%{dept_filter}%" if dept_filter else None))
+        if user_id:
+            cursor.execute("""
+                SELECT DISTINCT r.* FROM reports r
+                LEFT JOIN reviewer_assignments ra ON r.id = ra.report_id
+                WHERE ra.reviewer_id = ?
+                ORDER BY r.created_at DESC
+            """, (user_id,))
+        elif dept_filter:
+            cursor.execute(
+                "SELECT * FROM reports WHERE department LIKE ? ORDER BY created_at DESC",
+                (f"%{dept_filter}%",)
+            )
+        else:
+            cursor.execute("SELECT * FROM reports ORDER BY created_at DESC")
         rows = cursor.fetchall()
     elif role == "fixer":
-        cursor.execute("""
-            SELECT DISTINCT r.* FROM reports r
-            LEFT JOIN fixer_assignments fa ON r.id = fa.report_id
-            WHERE fa.fixer_id = ? OR 
-                  (? IS NOT NULL AND r.department LIKE ?)
-            ORDER BY r.created_at DESC
-        """, (user_id, dept_filter, f"%{dept_filter}%" if dept_filter else None))
+        if user_id:
+            cursor.execute("""
+                SELECT DISTINCT r.* FROM reports r
+                LEFT JOIN fixer_assignments fa ON r.id = fa.report_id
+                WHERE fa.fixer_id = ?
+                ORDER BY r.created_at DESC
+            """, (user_id,))
+        elif dept_filter:
+            cursor.execute(
+                "SELECT * FROM reports WHERE department LIKE ? ORDER BY created_at DESC",
+                (f"%{dept_filter}%",)
+            )
+        else:
+            cursor.execute("SELECT * FROM reports ORDER BY created_at DESC")
         rows = cursor.fetchall()
     else:
         cursor.execute("SELECT * FROM reports ORDER BY created_at DESC")
@@ -567,6 +599,7 @@ class ReviewerAnalysisRequest(BaseModel):
     resources_logged: str
     end_latitude: float
     end_longitude: float
+    analysis_image: Optional[str] = None
 
 class CoordinationMessageRequest(BaseModel):
     report_id: str
@@ -994,6 +1027,14 @@ async def get_reviewer_assignments(report_id: str):
     conn.close()
     return [dict(r) for r in rows]
 
+@app.post("/api/reviewer/upload-image")
+async def reviewer_upload_image(image: UploadFile = File(...)):
+    filename = f"reviewer_{int(time.time())}_{image.filename}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    with open(filepath, "wb") as f:
+        f.write(await image.read())
+    return {"image_path": f"/uploads/{filename}"}
+
 @app.post("/api/reviewer/submit-analysis")
 async def submit_reviewer_analysis(req: ReviewerAnalysisRequest):
     conn = database.get_db()
@@ -1003,9 +1044,9 @@ async def submit_reviewer_analysis(req: ReviewerAnalysisRequest):
     # 1. Update the reviewer assignment
     cursor.execute("""
         UPDATE reviewer_assignments
-        SET status = 'Completed', resources_logged = ?, completed_at = ?, end_latitude = ?, end_longitude = ?
+        SET status = 'Completed', resources_logged = ?, completed_at = ?, end_latitude = ?, end_longitude = ?, analysis_image = ?
         WHERE report_id = ? AND reviewer_id = ?
-    """, (req.resources_logged, now_str, req.end_latitude, req.end_longitude, req.report_id, req.reviewer_id))
+    """, (req.resources_logged, now_str, req.end_latitude, req.end_longitude, req.analysis_image, req.report_id, req.reviewer_id))
     
     # 2. Update reviewer location and availability
     cursor.execute("""

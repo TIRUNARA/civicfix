@@ -388,6 +388,10 @@
         }
 
         window.onload = function() {
+            if (currentUser && currentUser.activeRole && currentUser.activeRole !== 'citizen') {
+                window.location.href = "/";
+                return;
+            }
             renderHeaderAuth();
             
             const params = new URLSearchParams(window.location.search);
@@ -705,7 +709,8 @@
                     body: formData
                 });
                 if (!resp.ok) {
-                    throw new Error("Report submission failed.");
+                    const errorDetail = await resp.json().catch(() => ({}));
+                    throw new Error(errorDetail.detail || "Report submission failed.");
                 }
                 const result = await resp.json();
                 
@@ -715,7 +720,7 @@
                     department: "Processing (AI Analyzing...)"
                 });
             } catch (err) {
-                showToast("❌ Submission failed. Please try again.", "error");
+                showToast("❌ Submission failed: " + err.message, "error");
                 backToStep1();
             }
         }

@@ -58,7 +58,7 @@
             <a href="/leaderboard" class="text-accent hover:text-white transition-colors">Leaderboard</a>
         </nav>
         <div class="flex items-center gap-4">
-            <a href="/report" class="bg-accent hover:bg-[#00c294] text-slate-950 font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg text-sm flex items-center gap-1.5 hover:scale-[1.02] active:scale-[0.98]">
+            <a id="reportHazardBtn" href="/report" class="bg-accent hover:bg-[#00c294] text-slate-950 font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg text-sm flex items-center gap-1.5 hover:scale-[1.02] active:scale-[0.98]">
                 📸 Report Hazard
             </a>
             <div id="authContainer" class="flex items-center gap-2"></div>
@@ -111,6 +111,10 @@
         window.onload = function() {
             renderHeaderAuth();
             loadLeaderboard();
+            if (currentUser && currentUser.activeRole && currentUser.activeRole !== 'citizen') {
+                const reportBtn = document.getElementById("reportHazardBtn");
+                if (reportBtn) reportBtn.classList.add("hidden");
+            }
         };
 
         function renderHeaderAuth() {
