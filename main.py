@@ -353,8 +353,8 @@ async def submit_report(
         INSERT INTO leaderboard (email, username, avatar_url, civic_points, reports_submitted)
         VALUES (?, ?, ?, 10, 1)
         ON CONFLICT(email) DO UPDATE SET
-            civic_points = civic_points + 10,
-            reports_submitted = reports_submitted + 1,
+            civic_points = leaderboard.civic_points + 10,
+            reports_submitted = leaderboard.reports_submitted + 1,
             username = excluded.username,
             avatar_url = excluded.avatar_url
     """, (reporter_email_clean, reporter_name_clean, reporter_avatar))
