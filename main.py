@@ -711,6 +711,7 @@ for name in ["dashboard.html", "map.html", "report.html", "leaderboard.html"]:
         TEMPLATES[name] = f"Template {name} not found"
 
 @app.get("/", response_class=HTMLResponse)
+@app.get("/dashboard", response_class=HTMLResponse)
 async def serve_dashboard():
     return HTMLResponse(content=TEMPLATES.get("dashboard.html", ""))
 
