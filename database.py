@@ -37,6 +37,8 @@ class CursorWrapper:
     def execute(self, query, params=()):
         if self.is_pg:
             query = sqlite_to_postgres_query(query)
+            if "INTEGER PRIMARY KEY AUTOINCREMENT" in query:
+                query = query.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
             if "INSERT OR IGNORE" in query:
                 query = query.replace("INSERT OR IGNORE INTO", "INSERT INTO")
                 if "leaderboard" in query.lower() and "on conflict" not in query.lower():
