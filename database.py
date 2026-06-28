@@ -287,6 +287,55 @@ def init_db():
     )
     """)
     
+    # Auto-seed reviewers if empty
+    cursor.execute("SELECT COUNT(*) as count FROM reviewers")
+    res_rev = cursor.fetchone()
+    # Handle dict returned by pg wrapper vs tuple by sqlite3
+    rev_count = res_rev["count"] if isinstance(res_rev, dict) else res_rev[0]
+    if rev_count == 0:
+        reviewers = [
+            ("REV-01", "Inspector Rajesh (Roads)", "Municipal Roads", 12.9700, 77.5900, 1),
+            ("REV-02", "Inspector Amit (Roads)", "Municipal Roads", 12.9800, 77.6100, 1),
+            ("REV-03", "Inspector Priya (Water)", "Water & Sanitation", 12.9750, 77.6000, 1),
+            ("REV-04", "Inspector Kiran (Water)", "Water & Sanitation", 12.9650, 77.5850, 1),
+            ("REV-05", "Inspector Sunil (Waste)", "Solid Waste", 12.9300, 77.6100, 1),
+            ("REV-06", "Inspector Deepa (Lights)", "Utility Streetlighting", 12.9200, 77.5800, 1),
+            ("REV-07", "Inspector Vikram (Parks)", "Parks", 12.9720, 77.5930, 1),
+            ("REV-08", "Inspector Sonia (Highways)", "National Highways", 12.9900, 77.6200, 1),
+            ("REV-09", "Inspector Rahul (Grid)", "State Grid", 12.9500, 77.5700, 1),
+            ("REV-10", "Inspector Anjali (Env)", "Environment Board", 12.9400, 77.5900, 1),
+            ("REV-11", "Inspector General (Other)", "Other Issues", 12.9710, 77.5940, 1)
+        ]
+        for r_id, name, dept, lat, lon, avail in reviewers:
+            cursor.execute(
+                "INSERT INTO reviewers (id, name, department, latitude, longitude, is_available) VALUES (?, ?, ?, ?, ?, ?)",
+                (r_id, name, dept, lat, lon, avail)
+            )
+
+    # Auto-seed fixers if empty
+    cursor.execute("SELECT COUNT(*) as count FROM fixers")
+    res_fix = cursor.fetchone()
+    fix_count = res_fix["count"] if isinstance(res_fix, dict) else res_fix[0]
+    if fix_count == 0:
+        fixers = [
+            ("FIX-01", "Road Crew Alpha", "Municipal Roads", 1),
+            ("FIX-02", "Road Crew Beta", "Municipal Roads", 1),
+            ("FIX-03", "Sanitation Crew Alpha", "Water & Sanitation", 1),
+            ("FIX-04", "Sanitation Crew Beta", "Water & Sanitation", 1),
+            ("FIX-05", "Solid Waste Team A", "Solid Waste", 1),
+            ("FIX-06", "Electric Repair Team 1", "Utility Streetlighting", 1),
+            ("FIX-07", "Horticulture Unit 3", "Parks", 1),
+            ("FIX-08", "NHAI Road Patrol", "National Highways", 1),
+            ("FIX-09", "BESCOM Substation Team", "State Grid", 1),
+            ("FIX-10", "Pollution Control Squad", "Environment Board", 1),
+            ("FIX-11", "General Maintenance Crew", "Other Issues", 1)
+        ]
+        for f_id, name, dept, avail in fixers:
+            cursor.execute(
+                "INSERT INTO fixers (id, name, department, is_available) VALUES (?, ?, ?, ?)",
+                (f_id, name, dept, avail)
+            )
+            
     conn.commit()
     conn.close()
 

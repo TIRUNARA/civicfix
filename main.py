@@ -922,6 +922,17 @@ async def trigger_reviewer_assignment(report_id: str):
         cursor.execute("SELECT id, latitude, longitude FROM reviewers WHERE department = ? AND is_available = 1", (dept,))
         reviewers = cursor.fetchall()
         
+        # Fallback 1: Find any available reviewer globally
+        if not reviewers:
+            cursor.execute("SELECT id, latitude, longitude FROM reviewers WHERE is_available = 1")
+            reviewers = cursor.fetchall()
+            
+        # Fallback 2: Reset all availability and select nearest
+        if not reviewers:
+            cursor.execute("UPDATE reviewers SET is_available = 1")
+            cursor.execute("SELECT id, latitude, longitude FROM reviewers")
+            reviewers = cursor.fetchall()
+            
         if not reviewers:
             continue
             
@@ -966,6 +977,18 @@ async def trigger_fixer_dispatch(report_id: str):
         # Find available fixer in this department
         cursor.execute("SELECT id FROM fixers WHERE department = ? AND is_available = 1 LIMIT 1", (dept,))
         fixer = cursor.fetchone()
+        
+        # Fallback 1: Find any available fixer globally
+        if not fixer:
+            cursor.execute("SELECT id FROM fixers WHERE is_available = 1 LIMIT 1")
+            fixer = cursor.fetchone()
+            
+        # Fallback 2: Reset all fixers and select one
+        if not fixer:
+            cursor.execute("UPDATE fixers SET is_available = 1")
+            cursor.execute("SELECT id FROM fixers LIMIT 1")
+            fixer = cursor.fetchone()
+            
         if fixer:
             cursor.execute("""
                 INSERT INTO fixer_assignments (report_id, fixer_id, department, status)
