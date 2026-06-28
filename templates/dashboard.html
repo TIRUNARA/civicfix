@@ -589,7 +589,7 @@
                 const roleToggle = document.getElementById("roleToggle");
                 // Allow role toggle to be visible for demo/testing
                 roleToggle.classList.remove("hidden");
-                roleToggle.value = currentUser.activeRole;
+                roleToggle.value = currentUser.roleOption || currentUser.activeRole;
 
                 document.getElementById("landingView").classList.add("hidden");
                 document.getElementById("dashboardView").classList.remove("hidden");
@@ -1111,7 +1111,8 @@
             document.getElementById("modalCoordinationChatSection").classList.add("hidden");
             document.getElementById("modalInspectionCardSection").classList.add("hidden");
 
-            const activeRole = document.getElementById("roleToggle").value;
+            const roleOption = document.getElementById("roleToggle").value;
+            const activeRole = getUserDetailsForRoleOption(roleOption).role;
 
             // Load Reviewer Diagnostic Handover Card if a completed assignment exists
             fetch(`/api/reviewer/assignments/${r.id}`)
