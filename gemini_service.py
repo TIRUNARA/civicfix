@@ -85,6 +85,7 @@ def verify_image_quality(image_base64: str) -> Dict[str, Any]:
 def estimate_resolution_time(department: str, priority: int, nearby_count: int) -> int:
     """
     Estimate resolution time in hours based on department SLA, priority level, and active queue load.
+    Handles comma-separated departments by selecting the maximum SLA among them.
     """
     sla_map = {
         "Municipal Roads": 72,
@@ -97,7 +98,10 @@ def estimate_resolution_time(department: str, priority: int, nearby_count: int) 
         "Environment Board": 120,
         "Other Issues": 72
     }
-    base_hours = sla_map.get(department, 72)
+    depts = [d.strip() for d in department.split(",") if d.strip()]
+    if not depts:
+        depts = ["Other Issues"]
+    base_hours = max(sla_map.get(d, 72) for d in depts)
     queue_penalty = nearby_count * 6
     priority_discount = (priority - 1) * 12
     final_hours = max(4, base_hours + queue_penalty - priority_discount)
@@ -210,13 +214,13 @@ def analyze_report_images(images_bytes: list, user_note: str = None, latitude: f
         "You must return a valid JSON object matching this schema:\n"
         "{\n"
         "  \"tags\": [\"string\", ...],\n"
-        "  \"department\": \"Municipal Roads\" | \"Water & Sanitation\" | \"Solid Waste\" | \"Utility Streetlighting\" | \"Parks\" | \"National Highways\" | \"State Grid\" | \"Environment Board\" | \"Other Issues\",\n"
+        "  \"department\": \"A single department, or a comma-separated list of departments if the hazard spans multiple domains (e.g. 'Municipal Roads, Water & Sanitation'). Allowed values are: 'Municipal Roads', 'Water & Sanitation', 'Solid Waste', 'Utility Streetlighting', 'Parks', 'National Highways', 'State Grid', 'Environment Board', 'Other Issues'\",\n"
         "  \"priority\": 1 | 2 | 3 | 4 | 5,\n"
         "  \"analysis\": \"detailed textual analysis string\",\n"
         "  \"estimated_resolution_hours\": integer,\n"
         "  \"clarification_requested\": false\n"
         "}\n\n"
-        "Calculate the estimated_resolution_hours by taking the department SLA (Municipal Roads: 72, Water & Sanitation: 48, Solid Waste: 24, Utility Streetlighting: 24, State Grid: 24, Parks: 96) "
+        "Calculate the estimated_resolution_hours by taking the maximum department SLA among those involved (Municipal Roads: 72, Water & Sanitation: 48, Solid Waste: 24, Utility Streetlighting: 24, State Grid: 24, Parks: 96) "
         f"plus a queue penalty of {nearby_count * 6} hours based on the {nearby_count} active reports nearby, "
         "minus 12 hours per priority level above 1."
     )

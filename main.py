@@ -139,6 +139,15 @@ def async_process_report_ai(report_id: str, final_db_paths: list, user_note: str
             datetime.now(timezone.utc).isoformat(),
             report_id
         ))
+        
+        cursor.execute("DELETE FROM report_approvals WHERE report_id = ?", (report_id,))
+        depts = [d.strip() for d in dept.split(",") if d.strip()]
+        for d in depts:
+            cursor.execute("""
+                INSERT OR IGNORE INTO report_approvals (report_id, department, status)
+                VALUES (?, ?, 'Pending')
+            """, (report_id, d))
+            
         conn.commit()
         print(f"Background AI processing succeeded for report {report_id} -> {status}")
     except Exception as e:
@@ -328,6 +337,13 @@ async def submit_report(
             reporter_email_clean, reporter_name_clean, desc_clean or "No description provided."
         ))
         
+        depts = [d.strip() for d in department.split(",") if d.strip()]
+        for d in depts:
+            cursor.execute("""
+                INSERT OR IGNORE INTO report_approvals (report_id, department, status)
+                VALUES (?, ?, 'Pending')
+            """, (report_id, d))
+            
         tags_return = tags_list
         dept_return = department
         priority_return = final_priority
@@ -414,6 +430,24 @@ async def get_my_reports(email: str):
     return [dict(row) for row in rows]
 
 from pydantic import BaseModel
+
+class ApproveRequest(BaseModel):
+    department: str
+    officer_email: str
+
+class ReviewerAnalysisRequest(BaseModel):
+    report_id: str
+    reviewer_id: str
+    resources_logged: str
+    end_latitude: float
+    end_longitude: float
+
+class CoordinationMessageRequest(BaseModel):
+    report_id: str
+    sender_id: str
+    sender_name: str
+    sender_role: str
+    message: str
 
 class CreateSessionRequest(BaseModel):
     reporter_email: Optional[str] = None
@@ -651,6 +685,13 @@ async def resolve_report(id: str, resolved_image: UploadFile = File(...)):
         SET status = 'Resolved', resolved_image_path = ?, updated_at = ? 
         WHERE id = ?
         """, (db_resolved_path, now_str, id))
+        
+        # Free up assigned fixers
+        cursor.execute("SELECT fixer_id FROM fixer_assignments WHERE report_id = ?", (id,))
+        assigned_fixers = cursor.fetchall()
+        for fixer in assigned_fixers:
+            cursor.execute("UPDATE fixers SET is_available = 1 WHERE id = ?", (fixer["fixer_id"],))
+            
         conn.commit()
     
     conn.close()
@@ -684,3 +725,213 @@ async def serve_report():
 @app.get("/leaderboard", response_class=HTMLResponse)
 async def serve_leaderboard():
     return HTMLResponse(content=TEMPLATES.get("leaderboard.html", ""))
+
+# --- Segment 1/2/3/4 Orchestration Helpers & Endpoints ---
+
+async def trigger_reviewer_assignment(report_id: str):
+    conn = database.get_db()
+    cursor = conn.cursor()
+    
+    # Get report location and departments
+    cursor.execute("SELECT latitude, longitude, department FROM reports WHERE id = ?", (report_id,))
+    report = cursor.fetchone()
+    if not report:
+        conn.close()
+        return
+        
+    lat, lon, dept_str = report["latitude"], report["longitude"], report["department"]
+    depts = [d.strip() for d in dept_str.split(",") if d.strip()]
+    
+    for dept in depts:
+        # Find available reviewers in this department
+        cursor.execute("SELECT id, latitude, longitude FROM reviewers WHERE department = ? AND is_available = 1", (dept,))
+        reviewers = cursor.fetchall()
+        
+        if not reviewers:
+            continue
+            
+        # Find nearest reviewer
+        nearest_reviewer = None
+        min_dist = float("inf")
+        for rev in reviewers:
+            dist = get_distance(lat, lon, rev["latitude"], rev["longitude"])
+            if dist < min_dist:
+                min_dist = dist
+                nearest_reviewer = rev
+                
+        if nearest_reviewer:
+            # Create reviewer assignment
+            cursor.execute("""
+                INSERT INTO reviewer_assignments (report_id, reviewer_id, department, status)
+                VALUES (?, ?, ?, 'Assigned')
+            """, (report_id, nearest_reviewer["id"], dept))
+            
+            # Mark reviewer unavailable
+            cursor.execute("UPDATE reviewers SET is_available = 0 WHERE id = ?", (nearest_reviewer["id"],))
+            
+    conn.commit()
+    conn.close()
+
+async def trigger_fixer_dispatch(report_id: str):
+    conn = database.get_db()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT department FROM reports WHERE id = ?", (report_id,))
+    report = cursor.fetchone()
+    if not report:
+        conn.close()
+        return
+        
+    dept_str = report["department"]
+    depts = [d.strip() for d in dept_str.split(",") if d.strip()]
+    
+    is_coordinated = 1 if len(depts) > 1 else 0
+    
+    for dept in depts:
+        # Find available fixer in this department
+        cursor.execute("SELECT id FROM fixers WHERE department = ? AND is_available = 1 LIMIT 1", (dept,))
+        fixer = cursor.fetchone()
+        if fixer:
+            cursor.execute("""
+                INSERT INTO fixer_assignments (report_id, fixer_id, department, status)
+                VALUES (?, ?, ?, 'Assigned')
+            """, (report_id, fixer["id"], dept))
+            
+            cursor.execute("UPDATE fixers SET is_available = 0 WHERE id = ?", (fixer["id"],))
+            
+    now_str = datetime.now(timezone.utc).isoformat()
+    cursor.execute("UPDATE reports SET status = 'Fixing', is_coordinated = ?, updated_at = ? WHERE id = ?", (is_coordinated, now_str, report_id))
+    conn.commit()
+    conn.close()
+
+@app.get("/api/reports/approvals/{id}")
+async def get_report_approvals(id: str):
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM report_approvals WHERE report_id = ?", (id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+@app.post("/api/reports/approve/{id}")
+async def approve_report(id: str, req: ApproveRequest):
+    conn = database.get_db()
+    cursor = conn.cursor()
+    
+    # 1. Update the approval status for this specific department
+    now_str = datetime.now(timezone.utc).isoformat()
+    cursor.execute("""
+        UPDATE report_approvals 
+        SET status = 'Approved', officer_email = ?, approved_at = ?
+        WHERE report_id = ? AND department = ?
+    """, (req.officer_email, now_str, id, req.department))
+    
+    # If record was not present (e.g. ad hoc department), insert it
+    cursor.execute("SELECT changes() as changed")
+    if cursor.fetchone()["changed"] == 0:
+        cursor.execute("""
+            INSERT INTO report_approvals (report_id, department, status, officer_email, approved_at)
+            VALUES (?, ?, 'Approved', ?, ?)
+        """, (id, req.department, req.officer_email, now_str))
+        
+    # 2. Check if all departments for this report have approved
+    cursor.execute("SELECT status FROM report_approvals WHERE report_id = ?", (id,))
+    all_approvals = cursor.fetchall()
+    
+    all_approved = all([r["status"] == "Approved" for r in all_approvals])
+    
+    if all_approved and len(all_approvals) > 0:
+        # Transition status to Segment 2
+        cursor.execute("UPDATE reports SET status = 'Reviewing', updated_at = ? WHERE id = ?", (now_str, id))
+        conn.commit()
+        conn.close()
+        
+        # TRIGGER Dynamic Reviewer Assignment
+        await trigger_reviewer_assignment(id)
+        return {"status": "Reviewing", "message": "All departments approved. Reviewers assigned."}
+        
+    conn.commit()
+    conn.close()
+    return {"status": "Pending", "message": f"Department {req.department} approved. Waiting for others."}
+
+@app.get("/api/reviewer/assignments/{report_id}")
+async def get_reviewer_assignments(report_id: str):
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT ra.*, r.name as reviewer_name FROM reviewer_assignments ra JOIN reviewers r ON ra.reviewer_id = r.id WHERE ra.report_id = ?", (report_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+@app.post("/api/reviewer/submit-analysis")
+async def submit_reviewer_analysis(req: ReviewerAnalysisRequest):
+    conn = database.get_db()
+    cursor = conn.cursor()
+    now_str = datetime.now(timezone.utc).isoformat()
+    
+    # 1. Update the reviewer assignment
+    cursor.execute("""
+        UPDATE reviewer_assignments
+        SET status = 'Completed', resources_logged = ?, completed_at = ?, end_latitude = ?, end_longitude = ?
+        WHERE report_id = ? AND reviewer_id = ?
+    """, (req.resources_logged, now_str, req.end_latitude, req.end_longitude, req.report_id, req.reviewer_id))
+    
+    # 2. Update reviewer location and availability
+    cursor.execute("""
+        UPDATE reviewers
+        SET latitude = ?, longitude = ?, is_available = 1
+        WHERE id = ?
+    """, (req.end_latitude, req.end_longitude, req.reviewer_id))
+    
+    # 3. Check if all reviewers for this report are completed
+    cursor.execute("SELECT status FROM reviewer_assignments WHERE report_id = ?", (req.report_id,))
+    all_assignments = cursor.fetchall()
+    
+    all_completed = all([a["status"] == "Completed" for a in all_assignments])
+    
+    if all_completed and len(all_assignments) > 0:
+        # Transition status to Segment 3
+        cursor.execute("UPDATE reports SET status = 'Fixer Dispatch', updated_at = ? WHERE id = ?", (now_str, req.report_id))
+        conn.commit()
+        conn.close()
+        
+        # TRIGGER Actual Fixer Dispatch
+        await trigger_fixer_dispatch(req.report_id)
+        return {"status": "Fixing", "message": "All reviews complete. Ground crews dispatched."}
+        
+    conn.commit()
+    conn.close()
+    return {"status": "Reviewing", "message": f"Review by {req.reviewer_id} submitted."}
+
+@app.get("/api/fixer/assignments/{report_id}")
+async def get_fixer_assignments(report_id: str):
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT fa.*, f.name as fixer_name FROM fixer_assignments fa JOIN fixers f ON fa.fixer_id = f.id WHERE fa.report_id = ?", (report_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+@app.get("/api/coordination/get-messages/{report_id}")
+async def get_coordination_messages(report_id: str):
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM coordination_messages WHERE report_id = ? ORDER BY id ASC", (report_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+@app.post("/api/coordination/send-message")
+async def send_coordination_message(req: CoordinationMessageRequest):
+    conn = database.get_db()
+    cursor = conn.cursor()
+    now_str = datetime.now(timezone.utc).isoformat()
+    
+    cursor.execute("""
+        INSERT INTO coordination_messages (report_id, sender_id, sender_name, sender_role, message, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (req.report_id, req.sender_id, req.sender_name, req.sender_role, req.message, now_str))
+    
+    conn.commit()
+    conn.close()
+    return {"status": "sent"}
