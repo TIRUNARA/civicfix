@@ -575,6 +575,10 @@ class CoordinationMessageRequest(BaseModel):
     sender_role: str
     message: str
 
+class FixerStartWorkRequest(BaseModel):
+    report_id: str
+    fixer_id: str
+
 class CreateSessionRequest(BaseModel):
     reporter_email: Optional[str] = None
     reporter_name: Optional[str] = None
@@ -1062,3 +1066,24 @@ async def send_coordination_message(req: CoordinationMessageRequest):
     conn.commit()
     conn.close()
     return {"status": "sent"}
+
+@app.post("/api/fixer/start-work")
+async def fixer_start_work(req: FixerStartWorkRequest):
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE fixer_assignments 
+        SET status = 'Work in Progress' 
+        WHERE report_id = ? AND fixer_id = ?
+    """, (req.report_id, req.fixer_id))
+    
+    now_str = datetime.now(timezone.utc).isoformat()
+    cursor.execute("""
+        UPDATE reports 
+        SET status = 'Work in Progress', updated_at = ? 
+        WHERE id = ?
+    """, (now_str, req.report_id))
+    
+    conn.commit()
+    conn.close()
+    return {"status": "Work in Progress", "message": "Work started successfully."}

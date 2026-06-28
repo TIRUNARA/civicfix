@@ -89,16 +89,18 @@
         <nav class="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-300">
             <a href="/" class="hover:text-white transition-colors">Dashboard</a>
             <a href="/map" class="text-accent hover:text-white transition-colors">Map Explorer</a>
-            <a href="/leaderboard" class="hover:text-white transition-colors">Leaderboard</a>
+            <a href="/leaderboard" id="navLeaderboard" class="hover:text-white transition-colors">Leaderboard</a>
         </nav>
         <div class="flex items-center gap-4">
-            <a href="/report" class="bg-accent hover:bg-[#00c294] text-slate-950 font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg text-sm flex items-center gap-1.5 hover:scale-[1.02] active:scale-[0.98]">
+            <a id="reportHazardBtn" href="/report" class="bg-accent hover:bg-[#00c294] text-slate-950 font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg text-sm flex items-center gap-1.5 hover:scale-[1.02] active:scale-[0.98]">
                 📸 Report Hazard
             </a>
             
             <select id="roleToggle" class="bg-slate-900/80 border border-white/10 text-white rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-[#00E5B0] font-semibold cursor-pointer" onchange="toggleRole()">
                 <option value="citizen">Citizen Mode</option>
                 <option value="officer">Officer Portal</option>
+                <option value="reviewer">Reviewer Portal</option>
+                <option value="fixer">Fixer Portal</option>
             </select>
 
             <div id="authContainer" class="flex items-center gap-2"></div>
@@ -403,6 +405,12 @@
         function getRoleFromEmail(email) {
             if (!email) return 'citizen';
             const lower = email.toLowerCase();
+            if (lower.includes('reviewer') || lower.includes('inspect') || lower.includes('rajesh') || lower.includes('priya')) {
+                return 'reviewer';
+            }
+            if (lower.includes('fixer') || lower.includes('crew') || lower.includes('repair')) {
+                return 'fixer';
+            }
             if (lower.endsWith('.gov') || lower.endsWith('city.gov') || lower.endsWith('civicfix.org') || lower.includes('officer') || lower === 'shiva@civicfix.org' || lower === 'officer@gmail.com') {
                 return 'officer';
             }
@@ -422,7 +430,8 @@
                 }
                 
                 const roleToggle = document.getElementById("roleToggle");
-                if (currentUser.role === 'officer') {
+                const isStaff = (currentUser.role === 'officer' || currentUser.role === 'reviewer' || currentUser.role === 'fixer');
+                if (isStaff) {
                     roleToggle.classList.remove("hidden");
                     roleToggle.value = currentUser.activeRole;
                 } else {
@@ -492,6 +501,32 @@
             }
         }
 
+        function getReportsUrl() {
+            let url = "/api/reports/list";
+            if (currentUser) {
+                const activeRole = currentUser.activeRole || getRoleFromEmail(currentUser.email);
+                url += `?role=${activeRole}&email=${encodeURIComponent(currentUser.email)}&user_id=${encodeURIComponent(currentUser.id || '')}`;
+            }
+            return url;
+        }
+
+        function updateMapHeaderOptions() {
+            if (!currentUser) return;
+            const activeRole = currentUser.activeRole || getRoleFromEmail(currentUser.email);
+            const isCitizen = (activeRole === 'citizen');
+
+            const reportBtn = document.getElementById("reportHazardBtn");
+            const navLeaderboard = document.getElementById("navLeaderboard");
+
+            if (isCitizen) {
+                if (reportBtn) reportBtn.classList.remove("hidden");
+                if (navLeaderboard) navLeaderboard.classList.remove("hidden");
+            } else {
+                if (reportBtn) reportBtn.classList.add("hidden");
+                if (navLeaderboard) navLeaderboard.classList.add("hidden");
+            }
+        }
+
         let mapPollingInterval = null;
         function setupMapPolling(start) {
             if (mapPollingInterval) {
@@ -501,7 +536,8 @@
             if (start) {
                 mapPollingInterval = setInterval(async () => {
                     try {
-                        const resp = await fetch("/api/reports/list");
+                        const url = getReportsUrl();
+                        const resp = await fetch(url);
                         allReports = await resp.json();
                         applyFilters();
 
@@ -534,7 +570,9 @@
 
         async function loadReportsData() {
             try {
-                const resp = await fetch("/api/reports/list");
+                updateMapHeaderOptions();
+                const url = getReportsUrl();
+                const resp = await fetch(url);
                 allReports = await resp.json();
                 applyFilters();
 
@@ -840,7 +878,13 @@
                 currentUser.activeRole = role;
                 localStorage.setItem("user", JSON.stringify(currentUser));
             }
-            showToast(`🔄 Role switched to: ${role === 'officer' ? 'Municipal Officer' : 'Citizen'}`, "info");
+            const roleNames = {
+                citizen: 'Citizen Mode',
+                officer: 'Municipal Officer',
+                reviewer: 'Field Reviewer',
+                fixer: 'Ground Crew Fixer'
+            };
+            showToast(`🔄 Role switched to: ${roleNames[role] || role}`, "info");
             loadReportsData();
         }
     </script>

@@ -122,6 +122,25 @@ def test_coordinated_fixer_dispatch_and_hub():
     })
     assert msg2.status_code == 200
 
+    # 5. Start work
+    sw_resp = client.post("/api/fixer/start-work", json={
+        "report_id": report_id,
+        "fixer_id": "FIX-ROAD-1"
+    })
+    assert sw_resp.status_code == 200
+    assert sw_resp.json()["status"] == "Work in Progress"
+
+    # Verify report status in DB
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT status FROM reports WHERE id = ?", (report_id,))
+    assert cursor.fetchone()["status"] == "Work in Progress"
+    
+    # Verify assignment status in DB
+    cursor.execute("SELECT status FROM fixer_assignments WHERE report_id = ? AND fixer_id = ?", (report_id, "FIX-ROAD-1"))
+    assert cursor.fetchone()["status"] == "Work in Progress"
+    conn.close()
+
     # Retrieve messages and verify coordination
     chat_resp = client.get(f"/api/coordination/get-messages/{report_id}")
     assert chat_resp.status_code == 200

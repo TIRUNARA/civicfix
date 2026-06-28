@@ -77,10 +77,10 @@
         <nav class="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-300">
             <a href="/" class="text-accent hover:text-white transition-colors">Dashboard</a>
             <a href="/map" class="hover:text-white transition-colors">Map Explorer</a>
-            <a href="/leaderboard" class="hover:text-white transition-colors">Leaderboard</a>
+            <a href="/leaderboard" id="navLeaderboard" class="hover:text-white transition-colors">Leaderboard</a>
         </nav>
         <div class="flex items-center gap-4">
-            <a href="/report" class="bg-accent hover:bg-[#00c294] text-slate-950 font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg text-sm flex items-center gap-1.5 hover:scale-[1.02] active:scale-[0.98]">
+            <a id="reportHazardBtn" href="/report" class="bg-accent hover:bg-[#00c294] text-slate-950 font-bold px-4 py-2.5 rounded-xl transition-all shadow-lg text-sm flex items-center gap-1.5 hover:scale-[1.02] active:scale-[0.98]">
                 📸 Report Hazard
             </a>
             
@@ -176,15 +176,15 @@
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 class="text-3xl font-extrabold" id="welcomeMsg">Welcome, Citizen</h1>
-                    <p class="text-slate-400 text-sm">Monitor your reports, scores, and verification status.</p>
+                    <p class="text-slate-400 text-sm" id="welcomeSub">Monitor your reports, scores, and verification status.</p>
                 </div>
-                <a href="/report" class="bg-accent hover:bg-[#00c294] text-slate-950 font-bold px-5 py-3 rounded-xl transition-all shadow-lg text-sm flex items-center justify-center gap-2 self-start md:self-auto hover:scale-[1.02] active:scale-[0.98]">
+                <a id="reportHazardBtnDashboard" href="/report" class="bg-accent hover:bg-[#00c294] text-slate-950 font-bold px-5 py-3 rounded-xl transition-all shadow-lg text-sm flex items-center justify-center gap-2 self-start md:self-auto hover:scale-[1.02] active:scale-[0.98]">
                     📸 Report a New Hazard
                 </a>
             </div>
 
             <!-- User Metrics bar -->
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div id="userMetricsBar" class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div class="glass-card rounded-2xl p-5 flex flex-col">
                     <span id="filedLabel" class="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Reports Filed</span>
                     <span class="text-3xl font-extrabold text-white mt-1" id="userReportsFiled">0</span>
@@ -193,11 +193,11 @@
                     <span id="resolvedLabel" class="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Verified Fixed</span>
                     <span class="text-3xl font-extrabold text-white mt-1" id="userReportsResolved">0</span>
                 </div>
-                <div class="glass-card rounded-2xl p-5 flex flex-col">
+                <div id="pointsCard" class="glass-card rounded-2xl p-5 flex flex-col">
                     <span id="pointsLabel" class="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Earned Points</span>
                     <span class="text-3xl font-extrabold text-[#00E5B0] mt-1" id="userPoints">0</span>
                 </div>
-                <div class="glass-card rounded-2xl p-5 flex flex-col">
+                <div id="rankCard" class="glass-card rounded-2xl p-5 flex flex-col">
                     <span id="rankLabel" class="text-2xs font-semibold text-slate-500 uppercase tracking-wider">Citizen Rank</span>
                     <span class="text-3xl font-extrabold text-white mt-1" id="userRank">#--</span>
                 </div>
@@ -329,6 +329,27 @@
                         <button id="submitReviewBtn" class="w-full bg-[#00E5B0] hover:bg-[#00c294] text-slate-950 text-xs font-bold py-2 px-4 rounded-xl transition-all font-semibold">
                             Complete Diagnostic & Log GPS Location
                         </button>
+                    </div>
+                </div>
+
+                <!-- Segment 3 Fixer Actions -->
+                <div id="modalFixerActionSection" class="hidden space-y-4 border-t border-white/5 pt-4 bg-slate-900/40 p-4 rounded-2xl border border-white/5">
+                    <span class="text-2xs font-semibold text-slate-400 uppercase tracking-wider block">🔧 Ground Crew Workspace</span>
+                    <div class="space-y-3">
+                        <div class="flex flex-col sm:flex-row gap-2">
+                            <a id="fixerNavigationLink" target="_blank" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-2.5 px-3 rounded-xl transition-all text-center flex items-center justify-center gap-1">
+                                🗺️ Navigate (Google Maps)
+                            </a>
+                            <button id="fixerStartWorkBtn" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold py-2.5 px-3 rounded-xl transition-all">
+                                ⚡ Start Work (In Progress)
+                            </button>
+                        </div>
+                        <div class="border-t border-white/5 pt-3 space-y-2">
+                            <span class="block text-2xs text-slate-500 uppercase">Verify and Submit Resolution Proof</span>
+                            <button id="fixerResolveUploadBtn" class="w-full bg-[#00E5B0] hover:bg-[#00c294] text-slate-950 text-xs font-bold py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-md">
+                                📸 Upload Resolution Photo
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -748,6 +769,36 @@
             try {
                 const email = currentUser.email;
                 const activeRole = currentUser && currentUser.activeRole;
+                
+                // Toggle visibility based on active role
+                const isCitizen = (activeRole === 'citizen');
+                const reportBtn = document.getElementById("reportHazardBtn");
+                const reportBtnDashboard = document.getElementById("reportHazardBtnDashboard");
+                const navLeaderboard = document.getElementById("navLeaderboard");
+                const pointsCard = document.getElementById("pointsCard");
+                const rankCard = document.getElementById("rankCard");
+                const metricsBar = document.getElementById("userMetricsBar");
+
+                if (isCitizen) {
+                    if (reportBtn) reportBtn.classList.remove("hidden");
+                    if (reportBtnDashboard) reportBtnDashboard.classList.remove("hidden");
+                    if (navLeaderboard) navLeaderboard.classList.remove("hidden");
+                    if (pointsCard) pointsCard.classList.remove("hidden");
+                    if (rankCard) rankCard.classList.remove("hidden");
+                    if (metricsBar) {
+                        metricsBar.className = "grid grid-cols-2 lg:grid-cols-4 gap-4";
+                    }
+                } else {
+                    if (reportBtn) reportBtn.classList.add("hidden");
+                    if (reportBtnDashboard) reportBtnDashboard.classList.add("hidden");
+                    if (navLeaderboard) navLeaderboard.classList.add("hidden");
+                    if (pointsCard) pointsCard.classList.add("hidden");
+                    if (rankCard) rankCard.classList.add("hidden");
+                    if (metricsBar) {
+                        metricsBar.className = "grid grid-cols-1 md:grid-cols-2 gap-4";
+                    }
+                }
+
                 let url;
                 if (activeRole === 'officer' || activeRole === 'reviewer' || activeRole === 'fixer') {
                     url = `/api/reports/list?role=${activeRole}&email=${encodeURIComponent(email || '')}&user_id=${encodeURIComponent(currentUser.id || '')}`;
@@ -766,21 +817,25 @@
 
                 if (activeRole === 'officer') {
                     document.getElementById("welcomeMsg").textContent = `Welcome, Municipal Officer`;
+                    document.getElementById("welcomeSub").textContent = `Manage and resolve reported issues in your department.`;
                     document.getElementById("tableTitle").textContent = "All Municipal Reports";
                     document.getElementById("filedLabel").textContent = "Total System Reports";
                     document.getElementById("resolvedLabel").textContent = "Total Resolved Hazards";
                 } else if (activeRole === 'reviewer') {
                     document.getElementById("welcomeMsg").textContent = `Welcome, Field Reviewer`;
+                    document.getElementById("welcomeSub").textContent = `Review assigned issues and log on-site diagnostic specs.`;
                     document.getElementById("tableTitle").textContent = "Assigned / Open Field Reviews";
                     document.getElementById("filedLabel").textContent = "Total Reviews";
                     document.getElementById("resolvedLabel").textContent = "Completed Reviews";
                 } else if (activeRole === 'fixer') {
                     document.getElementById("welcomeMsg").textContent = `Welcome, Ground Crew Fixer`;
+                    document.getElementById("welcomeSub").textContent = `Navigate to dispatch sites and upload verified resolution proofs.`;
                     document.getElementById("tableTitle").textContent = "Assigned Resolution Operations";
                     document.getElementById("filedLabel").textContent = "Total Dispatches";
                     document.getElementById("resolvedLabel").textContent = "Resolved Hazards";
                 } else {
                     document.getElementById("welcomeMsg").textContent = `Welcome, Citizen`;
+                    document.getElementById("welcomeSub").textContent = `Monitor your reports, scores, and verification status.`;
                     document.getElementById("tableTitle").textContent = "My Filed Hazard Reports";
                     document.getElementById("filedLabel").textContent = "Reports Filed";
                     document.getElementById("resolvedLabel").textContent = "Verified Fixed";
@@ -1051,6 +1106,81 @@
                                     closeDetailModal();
                                     loadDashboardData();
                                 });
+                            };
+                        }
+                    });
+            }
+
+            // 5. Fixer action panel check
+            // Only show if the user is a fixer AND the report is in 'Fixing' or 'Work in Progress' status.
+            document.getElementById("modalFixerActionSection").classList.add("hidden");
+            if (activeRole === 'fixer' && ['Fixing', 'Work in Progress'].includes(r.status)) {
+                fetch(`/api/fixer/assignments/${r.id}`)
+                    .then(res => res.json())
+                    .then(assignments => {
+                        const myAssignment = assignments.find(a => a.fixer_id === currentUser.id);
+                        if (myAssignment) {
+                            document.getElementById("modalFixerActionSection").classList.remove("hidden");
+                            
+                            // Map navigation link
+                            document.getElementById("fixerNavigationLink").href = `https://www.google.com/maps/search/?api=1&query=${r.latitude},${r.longitude}`;
+
+                            const startBtn = document.getElementById("fixerStartWorkBtn");
+                            if (myAssignment.status === 'Work in Progress' || r.status === 'Work in Progress') {
+                                startBtn.textContent = "⚡ In Progress";
+                                startBtn.disabled = true;
+                                startBtn.className = "flex-1 bg-blue-500/30 text-blue-300 text-xs font-bold py-2.5 px-3 rounded-xl cursor-not-allowed";
+                            } else {
+                                startBtn.textContent = "⚡ Start Work (In Progress)";
+                                startBtn.disabled = false;
+                                startBtn.className = "flex-1 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold py-2.5 px-3 rounded-xl transition-all";
+                                startBtn.onclick = () => {
+                                    fetch(`/api/fixer/start-work`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            report_id: r.id,
+                                            fixer_id: currentUser.id
+                                        })
+                                    }).then(res => res.json()).then(data => {
+                                        showToast("Work started! Status updated to In Progress.", "success");
+                                        openDetailModal(r.id);
+                                        loadDashboardData();
+                                    });
+                                };
+                            }
+
+                            // Upload proof button
+                            document.getElementById("fixerResolveUploadBtn").onclick = () => {
+                                const input = document.createElement("input");
+                                input.type = "file";
+                                input.accept = "image/*";
+                                input.onchange = async () => {
+                                    const file = input.files[0];
+                                    if (!file) return;
+
+                                    showToast("Uploading and verifying resolution with AI Vision...", "info");
+                                    const formData = new FormData();
+                                    formData.append("resolved_image", file);
+
+                                    try {
+                                        const resp = await fetch(`/api/reports/resolve/${r.id}`, {
+                                            method: "POST",
+                                            body: formData
+                                        });
+                                        const result = await resp.json();
+                                        if (result.verified) {
+                                            showToast("✅ AI Verified Resolution: " + result.explanation, "success");
+                                            closeDetailModal();
+                                            loadDashboardData();
+                                        } else {
+                                            showToast("❌ Verification Failed: " + result.explanation, "error");
+                                        }
+                                    } catch(e) {
+                                        showToast("❌ Network error verifying resolution.", "error");
+                                    }
+                                };
+                                input.click();
                             };
                         }
                     });
