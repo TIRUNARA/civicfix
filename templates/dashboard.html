@@ -1146,11 +1146,6 @@
             document.getElementById("modalAiSummarySection").classList.add("hidden");
             document.getElementById("aiSummaryContentContainer").classList.add("hidden");
             document.getElementById("aiSummaryMarkdown").textContent = "";
-            
-            const modalAiReportSection = document.getElementById("modalAiReportSection");
-            if (modalAiReportSection) {
-                modalAiReportSection.classList.add("hidden");
-            }
 
             const roleOption = document.getElementById("roleToggle").value;
             const activeRole = getUserDetailsForRoleOption(roleOption).role;
