@@ -331,3 +331,53 @@ def verify_resolution(before_bytes: bytes, after_bytes: bytes) -> dict:
         }
     except Exception as e:
         return {"verified": True, "explanation": f"Fallback verification triggered: {e}"}
+
+def generate_reviewer_summary(report_data: dict, assignments: list) -> str:
+    """
+    Generate a professional structured diagnostic and resource summary of the reviewer's field logs.
+    """
+    if not client:
+        summary = "### 🛠️ FIELD DIAGNOSTIC REPORT\n"
+        summary += f"**Report ID**: {report_data.get('id')}\n"
+        summary += f"**Department**: {report_data.get('department')}\n"
+        summary += f"**Description**: {report_data.get('description')}\n\n"
+        summary += "#### 📦 ASSIGNED RESOURCES\n"
+        for a in assignments:
+            summary += f"- **Reviewer {a.get('reviewer_name', 'Inspector')}** logged resources:\n"
+            summary += f"  > {a.get('resources_logged') or 'None specified'}\n"
+            summary += f"  > Coordinates: {a.get('end_latitude')}, {a.get('end_longitude')}\n"
+        return summary
+
+    prompt = (
+        "You are an expert municipal planning supervisor.\n"
+        "Generate a structured, professional inspection diagnostic summary based on the following report details and reviewer field logs.\n\n"
+        f"Report Details:\n"
+        f"- ID: {report_data.get('id')}\n"
+        f"- Department: {report_data.get('department')}\n"
+        f"- Original Description: {report_data.get('description')}\n\n"
+        f"Reviewer Field Assignments & Submissions:\n"
+    )
+    for a in assignments:
+        prompt += (
+            f"- Reviewer: {a.get('reviewer_name') or 'Inspector'}\n"
+            f"  Status: {a.get('status')}\n"
+            f"  Logged Resources/Materials: {a.get('resources_logged') or 'None specified'}\n"
+            f"  GPS Location Logged: Lat {a.get('end_latitude')}, Lng {a.get('end_longitude')}\n"
+            f"  Image Uploaded: {'Yes' if a.get('analysis_image') else 'No'}\n\n"
+        )
+    prompt += (
+        "Create a clean Markdown document with these sections:\n"
+        "1. Executive Summary: Short overview of the diagnostic inspection findings.\n"
+        "2. Resource Checklist: A professional list of resources and materials required by the reviewer for fixing the issue.\n"
+        "3. Verification status: Confirmation of coordinates comparison with report origin.\n"
+        "Keep it highly professional, clean, and structured."
+    )
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
+        return response.text.strip()
+    except Exception as e:
+        return f"Failed to generate summary: {e}"

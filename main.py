@@ -1077,6 +1077,28 @@ async def get_reviewer_assignments(report_id: str):
     conn.close()
     return [dict(r) for r in rows]
 
+@app.get("/api/reports/reviewer-summary/{report_id}")
+async def get_report_reviewer_summary(report_id: str):
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, department, description FROM reports WHERE id = ?", (report_id,))
+    report = cursor.fetchone()
+    if not report:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Report not found")
+        
+    cursor.execute("""
+        SELECT ra.*, r.name as reviewer_name 
+        FROM reviewer_assignments ra 
+        JOIN reviewers r ON ra.reviewer_id = r.id 
+        WHERE ra.report_id = ?
+    """, (report_id,))
+    assignments = cursor.fetchall()
+    conn.close()
+    
+    summary = gemini_service.generate_reviewer_summary(dict(report), [dict(a) for a in assignments])
+    return {"summary": summary}
+
 @app.post("/api/reviewer/upload-image")
 async def reviewer_upload_image(image: UploadFile = File(...)):
     contents = await image.read()

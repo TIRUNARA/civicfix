@@ -319,6 +319,20 @@
                     </div>
                 </div>
 
+                <!-- AI Resource Summary Section -->
+                <div id="modalAiSummarySection" class="hidden space-y-3 border-t border-white/5 pt-4 bg-slate-900/40 p-4 rounded-2xl border border-white/5">
+                    <span class="text-2xs font-semibold text-cyan-400 uppercase tracking-wider block">🤖 AI Resource & Diagnostic Summary</span>
+                    <button id="generateAiSummaryBtn" class="w-full bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/30 text-cyan-400 text-xs font-bold py-2 px-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5">
+                        ✨ Generate AI Resource & Diagnostic Summary
+                    </button>
+                    <div id="aiSummaryContentContainer" class="hidden space-y-2 mt-2">
+                        <div id="aiSummaryMarkdown" class="bg-slate-950/70 p-3 rounded-xl border border-white/5 text-xs text-slate-200 overflow-y-auto max-h-48 whitespace-pre-wrap leading-relaxed"></div>
+                        <button id="downloadSummaryBtn" class="w-full bg-slate-800 hover:bg-slate-700 text-white text-2xs font-bold py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-1">
+                            📥 Download Resource List (.txt)
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Segment 1 Approval Section -->
                 <div id="modalApprovalSection" class="hidden space-y-3 border-t border-white/5 pt-4">
                     <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">Department Approvals</span>
@@ -1001,6 +1015,9 @@
             document.getElementById("modalCoordinationChatSection").classList.add("hidden");
             document.getElementById("modalInspectionCardSection").classList.add("hidden");
             document.getElementById("modalFixerActionSection").classList.add("hidden");
+            document.getElementById("modalAiSummarySection").classList.add("hidden");
+            document.getElementById("aiSummaryContentContainer").classList.add("hidden");
+            document.getElementById("aiSummaryMarkdown").textContent = "";
 
             const activeRole = currentUser && currentUser.activeRole;
 
@@ -1022,6 +1039,46 @@
                         } else {
                             photoContainer.classList.add("hidden");
                         }
+                    }
+
+                    // Setup AI Resource and Diagnostic Summary logic
+                    const aiSummarySection = document.getElementById("modalAiSummarySection");
+                    if (assignments && assignments.length > 0) {
+                        aiSummarySection.classList.remove("hidden");
+                        const generateBtn = document.getElementById("generateAiSummaryBtn");
+                        const summaryContent = document.getElementById("aiSummaryContentContainer");
+                        const markdownDiv = document.getElementById("aiSummaryMarkdown");
+                        const downloadBtn = document.getElementById("downloadSummaryBtn");
+                        
+                        generateBtn.onclick = () => {
+                            generateBtn.disabled = true;
+                            generateBtn.textContent = "⏳ Analyzing & Generating summary...";
+                            
+                            fetch(`/api/reports/reviewer-summary/${r.id}`)
+                                .then(res => res.json())
+                                .then(data => {
+                                    generateBtn.disabled = false;
+                                    generateBtn.textContent = "✨ Generate AI Resource & Diagnostic Summary";
+                                    summaryContent.classList.remove("hidden");
+                                    markdownDiv.textContent = data.summary || "No summary returned.";
+                                    
+                                    downloadBtn.onclick = () => {
+                                        const blob = new Blob([data.summary], { type: "text/plain;charset=utf-8" });
+                                        const url = URL.createObjectURL(blob);
+                                        const link = document.createElement("a");
+                                        link.href = url;
+                                        link.download = `CivicFix_Report_${r.id}_Summary.txt`;
+                                        link.click();
+                                        URL.revokeObjectURL(url);
+                                    };
+                                })
+                                .catch(err => {
+                                    console.error("Error generating summary:", err);
+                                    generateBtn.disabled = false;
+                                    generateBtn.textContent = "✨ Generate AI Resource & Diagnostic Summary";
+                                    showToast("Failed to generate AI summary", "error");
+                                });
+                        };
                     }
                 })
                 .catch(err => console.error("Error loading reviewer handover card", err));
@@ -1266,7 +1323,7 @@
             }
 
             // 4. Coordination Chat Section
-            if (['Reviewing', 'Awaiting Review Approval', 'Fixing', 'Work in Progress', 'Resolved'].includes(r.status)) {
+            if (!isCitizen && ['Reviewing', 'Awaiting Review Approval', 'Fixing', 'Work in Progress', 'Resolved'].includes(r.status)) {
                 document.getElementById("modalCoordinationChatSection").classList.remove("hidden");
                 loadChatMessages(r.id);
                 document.getElementById("chatSendBtn").onclick = () => {
