@@ -415,6 +415,8 @@ async def list_reports(role: str = "citizen", email: str = None, user_id: str = 
             dept_filter = "State Grid"
         elif "environ" in email_lower:
             dept_filter = "Environment Board"
+        elif "other" in email_lower:
+            dept_filter = "Other Issues"
 
     if role == "citizen":
         cursor.execute("SELECT * FROM reports ORDER BY created_at DESC")
@@ -567,7 +569,15 @@ async def get_report_timeline(id: str):
             "description": "Officer verified completion image. Ticket closed successfully.",
             "timestamp": r["updated_at"],
             "status": "completed",
-            "epoch": r["updated_at"]
+            "epoch": "9999-12-31 23:59:59"
+        })
+    else:
+        events.append({
+            "title": "Resolution Verified",
+            "description": "Awaiting final resolution proof and officer verification.",
+            "timestamp": "Awaiting action",
+            "status": "active",
+            "epoch": "9999-12-31 23:59:59"
         })
     
     # Sort events by timestamp (completed first, then active/pending)
@@ -860,11 +870,17 @@ async def resolve_report(id: str, resolved_image: UploadFile = File(...)):
         WHERE id = ?
         """, (db_resolved_path, now_str, id))
         
-        # Free up assigned fixers
+        # Free up assigned fixers and mark assignments as Completed
         cursor.execute("SELECT fixer_id FROM fixer_assignments WHERE report_id = ?", (id,))
         assigned_fixers = cursor.fetchall()
         for fixer in assigned_fixers:
             cursor.execute("UPDATE fixers SET is_available = 1 WHERE id = ?", (fixer["fixer_id"],))
+            
+        cursor.execute("""
+            UPDATE fixer_assignments 
+            SET status = 'Completed', completed_at = ? 
+            WHERE report_id = ?
+        """, (now_str, id))
             
         conn.commit()
     

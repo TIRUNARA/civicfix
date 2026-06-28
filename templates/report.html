@@ -197,7 +197,7 @@
                                 </select>
                             </div>
 
-                            <div>
+                            <div id="wizardPriorityContainer">
                                 <label class="text-slate-500 uppercase block mb-1">Priority Level</label>
                                 <select id="wizardPriority" class="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:ring-1 focus:ring-[#00E5B0]">
                                     <option value="1">Level 1 (Low priority)</option>
@@ -736,6 +736,16 @@
             document.getElementById("wizardDept").value = dept;
             document.getElementById("wizardPriority").value = priority;
             document.getElementById("wizardDesc").value = analysis;
+
+            const isCitizen = (!currentUser || currentUser.activeRole === 'citizen' || currentUser.role === 'citizen');
+            const wizardPriorityContainer = document.getElementById("wizardPriorityContainer");
+            if (wizardPriorityContainer) {
+                if (isCitizen) {
+                    wizardPriorityContainer.classList.add("hidden");
+                } else {
+                    wizardPriorityContainer.classList.remove("hidden");
+                }
+            }
         }
 
         function backToStep1() {

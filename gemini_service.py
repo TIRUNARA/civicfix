@@ -111,15 +111,18 @@ def estimate_resolution_time(department: str, priority: int, nearby_count: int) 
 
 def safe_json_parse(response_text: str, client_ref=None, max_retries=3) -> dict:
     text = response_text.strip()
+    parsed_data = None
     for attempt in range(max_retries):
         try:
-            return json.loads(text)
+            parsed_data = json.loads(text)
+            break
         except json.JSONDecodeError:
             # Try to locate JSON block { ... }
             match = re.search(r'\{.*\}', text, re.DOTALL)
             if match:
                 try:
-                    return json.loads(match.group(0))
+                    parsed_data = json.loads(match.group(0))
+                    break
                 except json.JSONDecodeError:
                     pass
             
@@ -141,15 +144,66 @@ def safe_json_parse(response_text: str, client_ref=None, max_retries=3) -> dict:
                     break
             else:
                 break
-    # Fallback structure
-    return {
-        "tags": ["Infrastructure"],
-        "department": "Other Issues",
-        "priority": 3,
-        "analysis": "Failed to parse AI structure. Fallback initialized.",
-        "estimated_resolution_hours": 72,
-        "clarification_requested": False
+                
+    if not parsed_data:
+        # Fallback structure
+        parsed_data = {
+            "tags": ["Infrastructure"],
+            "department": "Other Issues",
+            "priority": 3,
+            "analysis": "Failed to parse AI structure. Fallback initialized.",
+            "estimated_resolution_hours": 72,
+            "clarification_requested": False
+        }
+        
+    # Enforce allowed department list
+    allowed_depts = {
+        "Municipal Roads",
+        "Water & Sanitation",
+        "Solid Waste",
+        "Utility Streetlighting",
+        "Parks",
+        "National Highways",
+        "State Grid",
+        "Environment Board",
+        "Other Issues"
     }
+    
+    dept_val = parsed_data.get("department", "Other Issues") or "Other Issues"
+    
+    # Handle both comma separated string and list
+    if isinstance(dept_val, list):
+        depts = [str(d).strip() for d in dept_val if d]
+    else:
+        depts = [d.strip() for d in str(dept_val).split(",") if d.strip()]
+        
+    valid_depts = []
+    for d in depts:
+        matched = False
+        for allowed in allowed_depts:
+            if d.lower() == allowed.lower() or allowed.lower() in d.lower():
+                valid_depts.append(allowed)
+                matched = True
+                break
+        if not matched:
+            valid_depts.append("Other Issues")
+            
+    valid_depts = list(dict.fromkeys(valid_depts))
+    if not valid_depts:
+        valid_depts = ["Other Issues"]
+        
+    parsed_data["department"] = ", ".join(valid_depts)
+    
+    # Enforce priority range 1-5
+    try:
+        priority = int(parsed_data.get("priority", 3))
+        if priority < 1 or priority > 5:
+            priority = 3
+    except Exception:
+        priority = 3
+    parsed_data["priority"] = priority
+    
+    return parsed_data
 
 def analyze_report_images(images_bytes: list, user_note: str = None, latitude: float = 12.9716, longitude: float = 77.5946) -> dict:
     # Step 1: Verify Image Quality

@@ -44,6 +44,24 @@ def test_timeline_endpoint():
     assert timeline[0]["title"] == "Report Submitted"
     assert "Approved" in timeline[2]["description"]
 
+    # Assert Resolution Verified is present as pending
+    assert timeline[-1]["title"] == "Resolution Verified"
+    assert timeline[-1]["status"] == "active"
+
+    # Now let's mark the report as Resolved
+    conn = database.get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE reports SET status = 'Resolved', updated_at = '2026-06-28 10:20:00' WHERE id = 'REP-TIMELINE-01'")
+    conn.commit()
+    conn.close()
+
+    resp = client.get("/api/reports/timeline/REP-TIMELINE-01")
+    assert resp.status_code == 200
+    timeline2 = resp.json()
+    assert timeline2[-1]["title"] == "Resolution Verified"
+    assert timeline2[-1]["status"] == "completed"
+    assert timeline2[-1]["timestamp"] == "2026-06-28 10:20:00"
+
     print("✓ Timeline aggregation endpoint verified successfully!")
 
 if __name__ == "__main__":

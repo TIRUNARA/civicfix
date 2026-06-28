@@ -86,16 +86,40 @@
             
             <select id="roleToggle" class="bg-slate-900/80 border border-white/10 text-white rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-[#00E5B0] font-semibold cursor-pointer" onchange="toggleRole()">
                 <option value="citizen">Citizen Mode</option>
-                <option value="officer">Officer (All Departments)</option>
-                <option value="officer_road">Officer (Municipal Roads)</option>
-                <option value="officer_water">Officer (Water & Sanitation)</option>
-                <option value="officer_waste">Officer (Solid Waste)</option>
-                <option value="officer_light">Officer (Streetlighting)</option>
-                <option value="reviewer">Reviewer (Rajesh - Roads)</option>
-                <option value="reviewer_water">Reviewer (Priya - Water)</option>
-                <option value="reviewer_waste">Reviewer (Sunil - Waste)</option>
-                <option value="fixer">Fixer (Alpha - Roads)</option>
-                <option value="fixer_water">Fixer (Alpha - Water)</option>
+                <optgroup label="Officers">
+                    <option value="officer">Officer (All Departments)</option>
+                    <option value="officer_road">Officer (Municipal Roads)</option>
+                    <option value="officer_water">Officer (Water & Sanitation)</option>
+                    <option value="officer_waste">Officer (Solid Waste)</option>
+                    <option value="officer_light">Officer (Utility Streetlighting)</option>
+                    <option value="officer_parks">Officer (Parks)</option>
+                    <option value="officer_highways">Officer (National Highways)</option>
+                    <option value="officer_grid">Officer (State Grid)</option>
+                    <option value="officer_env">Officer (Environment Board)</option>
+                    <option value="officer_other">Officer (Other Issues)</option>
+                </optgroup>
+                <optgroup label="Reviewers">
+                    <option value="reviewer_road">Reviewer (Municipal Roads)</option>
+                    <option value="reviewer_water">Reviewer (Water & Sanitation)</option>
+                    <option value="reviewer_waste">Reviewer (Solid Waste)</option>
+                    <option value="reviewer_light">Reviewer (Utility Streetlighting)</option>
+                    <option value="reviewer_parks">Reviewer (Parks)</option>
+                    <option value="reviewer_highways">Reviewer (National Highways)</option>
+                    <option value="reviewer_grid">Reviewer (State Grid)</option>
+                    <option value="reviewer_env">Reviewer (Environment Board)</option>
+                    <option value="reviewer_other">Reviewer (Other Issues)</option>
+                </optgroup>
+                <optgroup label="Fixers">
+                    <option value="fixer_road">Fixer (Municipal Roads)</option>
+                    <option value="fixer_water">Fixer (Water & Sanitation)</option>
+                    <option value="fixer_waste">Fixer (Solid Waste)</option>
+                    <option value="fixer_light">Fixer (Utility Streetlighting)</option>
+                    <option value="fixer_parks">Fixer (Parks)</option>
+                    <option value="fixer_highways">Fixer (National Highways)</option>
+                    <option value="fixer_grid">Fixer (State Grid)</option>
+                    <option value="fixer_env">Fixer (Environment Board)</option>
+                    <option value="fixer_other">Fixer (Other Issues)</option>
+                </optgroup>
             </select>
 
             <div id="authContainer" class="flex items-center gap-2"></div>
@@ -234,7 +258,7 @@
                                 <th class="py-3 px-4">Preview</th>
                                 <th class="py-3 px-4">Timestamp</th>
                                 <th class="py-3 px-4">Department</th>
-                                <th class="py-3 px-4">Priority</th>
+                                <th id="thPriority" class="py-3 px-4">Priority</th>
                                 <th class="py-3 px-4">Status</th>
                                 <th class="py-3 px-4 text-right">Actions</th>
                             </tr>
@@ -281,7 +305,7 @@
                         <span class="text-slate-500 font-semibold block uppercase">Status</span>
                         <span id="modalStatus" class="inline-block mt-0.5 px-2.5 py-0.5 rounded text-[11px] font-bold">...</span>
                     </div>
-                    <div>
+                    <div id="modalPriorityContainer">
                         <span class="text-slate-500 font-semibold block uppercase">Priority Level</span>
                         <span class="text-slate-200 font-bold" id="modalPriority">...</span>
                     </div>
@@ -665,60 +689,41 @@
                 avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=officershiva`;
                 id = "officer";
                 role = "officer";
-            } else if (optionVal === 'officer_road') {
-                email = "road.officer@civicfix.org";
-                name = "Officer Shiva (Roads)";
-                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=officerroad`;
-                id = "officer_road";
+            } else if (optionVal.startsWith('officer_')) {
+                const sub = optionVal.substring(8);
                 role = "officer";
-            } else if (optionVal === 'officer_water') {
-                email = "water.officer@civicfix.org";
-                name = "Officer Priya (Water)";
-                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=officerwater`;
-                id = "officer_water";
-                role = "officer";
-            } else if (optionVal === 'officer_waste') {
-                email = "waste.officer@civicfix.org";
-                name = "Officer Kiran (Waste)";
-                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=officerwaste`;
-                id = "officer_waste";
-                role = "officer";
-            } else if (optionVal === 'officer_light') {
-                email = "light.officer@civicfix.org";
-                name = "Officer Deepa (Lights)";
-                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=officerlight`;
-                id = "officer_light";
-                role = "officer";
-            } else if (optionVal === 'reviewer') { // Rajesh - Roads
-                email = "inspector.rajesh@civicfix.org";
-                name = "Inspector Rajesh (Roads)";
-                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=rajesh`;
-                id = "REV-01";
+                id = optionVal;
+                if (sub === 'road') { email = "road.officer@civicfix.org"; name = "Officer Shiva (Roads)"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=officerroad"; }
+                else if (sub === 'water') { email = "water.officer@civicfix.org"; name = "Officer Priya (Water)"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=officerwater"; }
+                else if (sub === 'waste') { email = "waste.officer@civicfix.org"; name = "Officer Kiran (Waste)"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=officerwaste"; }
+                else if (sub === 'light') { email = "light.officer@civicfix.org"; name = "Officer Deepa (Lights)"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=officerlight"; }
+                else if (sub === 'parks') { email = "park.officer@civicfix.org"; name = "Officer Vikram (Parks)"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=officerparks"; }
+                else if (sub === 'highways') { email = "highway.officer@civicfix.org"; name = "Officer Sonia (Highways)"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=officerhighways"; }
+                else if (sub === 'grid') { email = "grid.officer@civicfix.org"; name = "Officer Rahul (Grid)"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=officergrid"; }
+                else if (sub === 'env') { email = "environ.officer@civicfix.org"; name = "Officer Anjali (Env)"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=officerenv"; }
+                else if (sub === 'other') { email = "other.officer@civicfix.org"; name = "Officer General (Other)"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=officerother"; }
+            } else if (optionVal.startsWith('reviewer')) {
                 role = "reviewer";
-            } else if (optionVal === 'reviewer_water') { // Priya - Water
-                email = "inspector.priya@civicfix.org";
-                name = "Inspector Priya (Water)";
-                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=priya`;
-                id = "REV-03";
-                role = "reviewer";
-            } else if (optionVal === 'reviewer_waste') { // Sunil - Waste
-                email = "inspector.sunil@civicfix.org";
-                name = "Inspector Sunil (Waste)";
-                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=sunil`;
-                id = "REV-05";
-                role = "reviewer";
-            } else if (optionVal === 'fixer') { // Alpha - Roads
-                email = "road.alpha@civicfix.org";
-                name = "Road Crew Alpha (Roads)";
-                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=roadalpha`;
-                id = "FIX-01";
+                if (optionVal === 'reviewer' || optionVal === 'reviewer_road') { email = "road.reviewer@civicfix.org"; name = "Inspector Rajesh (Roads)"; id = "REV-01"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=rajesh"; }
+                else if (optionVal === 'reviewer_water') { email = "water.reviewer@civicfix.org"; name = "Inspector Priya (Water)"; id = "REV-03"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=priya"; }
+                else if (optionVal === 'reviewer_waste') { email = "waste.reviewer@civicfix.org"; name = "Inspector Sunil (Waste)"; id = "REV-05"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=sunil"; }
+                else if (optionVal === 'reviewer_light') { email = "light.reviewer@civicfix.org"; name = "Inspector Deepa (Lights)"; id = "REV-06"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=deepa"; }
+                else if (optionVal === 'reviewer_parks') { email = "park.reviewer@civicfix.org"; name = "Inspector Vikram (Parks)"; id = "REV-07"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=vikram"; }
+                else if (optionVal === 'reviewer_highways') { email = "highway.reviewer@civicfix.org"; name = "Inspector Sonia (Highways)"; id = "REV-08"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=sonia"; }
+                else if (optionVal === 'reviewer_grid') { email = "grid.reviewer@civicfix.org"; name = "Inspector Rahul (Grid)"; id = "REV-09"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=rahul"; }
+                else if (optionVal === 'reviewer_env') { email = "environ.reviewer@civicfix.org"; name = "Inspector Anjali (Env)"; id = "REV-10"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=anjali"; }
+                else if (optionVal === 'reviewer_other') { email = "other.reviewer@civicfix.org"; name = "Inspector General (Other)"; id = "REV-11"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=other"; }
+            } else if (optionVal.startsWith('fixer')) {
                 role = "fixer";
-            } else if (optionVal === 'fixer_water') { // Alpha - Water
-                email = "sanitation.alpha@civicfix.org";
-                name = "Sanitation Crew Alpha (Water)";
-                avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=sanitationalpha`;
-                id = "FIX-03";
-                role = "fixer";
+                if (optionVal === 'fixer' || optionVal === 'fixer_road') { email = "road.fixer@civicfix.org"; name = "Road Crew Alpha (Roads)"; id = "FIX-01"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=roadalpha"; }
+                else if (optionVal === 'fixer_water') { email = "water.fixer@civicfix.org"; name = "Sanitation Crew Alpha (Water)"; id = "FIX-03"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=sanitationalpha"; }
+                else if (optionVal === 'fixer_waste') { email = "waste.fixer@civicfix.org"; name = "Solid Waste Team A (Waste)"; id = "FIX-05"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=solidwaste"; }
+                else if (optionVal === 'fixer_light') { email = "light.fixer@civicfix.org"; name = "Electric Repair Team 1 (Lights)"; id = "FIX-06"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=electricrepair"; }
+                else if (optionVal === 'fixer_parks') { email = "park.fixer@civicfix.org"; name = "Horticulture Unit 3 (Parks)"; id = "FIX-07"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=parksfix"; }
+                else if (optionVal === 'fixer_highways') { email = "highway.fixer@civicfix.org"; name = "NHAI Road Patrol (Highways)"; id = "FIX-08"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=highwaysfix"; }
+                else if (optionVal === 'fixer_grid') { email = "grid.fixer@civicfix.org"; name = "BESCOM Substation Team (Grid)"; id = "FIX-09"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=gridfix"; }
+                else if (optionVal === 'fixer_env') { email = "environ.fixer@civicfix.org"; name = "Pollution Control Squad (Env)"; id = "FIX-10"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=envfix"; }
+                else if (optionVal === 'fixer_other') { email = "other.fixer@civicfix.org"; name = "General Maintenance Crew (Other)"; id = "FIX-11"; avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=generalfix"; }
             } else { // citizen
                 email = "shiva@civicfix.org";
                 name = "Shiva (Citizen)";
@@ -980,6 +985,15 @@
             noneState.classList.add("hidden");
             document.getElementById("reportsCountLabel").textContent = `${reports.length} reports found`;
 
+            const isCitizen = (!currentUser || currentUser.activeRole === 'citizen' || currentUser.role === 'citizen');
+            
+            // Toggle priority column header
+            const thPriority = document.getElementById("thPriority");
+            if (thPriority) {
+                if (isCitizen) thPriority.classList.add("hidden");
+                else thPriority.classList.remove("hidden");
+            }
+
             reports.forEach(r => {
                 let statusColor = "bg-amber-500/20 text-amber-400 border border-amber-500/30";
                 if (r.status === 'Resolved') statusColor = "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
@@ -996,6 +1010,8 @@
                     }
                 };
 
+                const priorityCell = isCitizen ? "" : `<td class="py-3.5 px-4"><span class="text-xs font-semibold px-2 py-0.5 bg-slate-800 rounded">Level ${r.priority}</span></td>`;
+
                 tr.innerHTML = `
                     <td class="py-3.5 px-4 font-mono font-bold text-slate-300">${r.id}</td>
                     <td class="py-3.5 px-4">
@@ -1006,7 +1022,7 @@
                     </td>
                     <td class="py-3.5 px-4 text-xs text-slate-400">${new Date(r.created_at).toLocaleDateString()}</td>
                     <td class="py-3.5 px-4 font-semibold text-slate-200">${r.department}</td>
-                    <td class="py-3.5 px-4"><span class="text-xs font-semibold px-2 py-0.5 bg-slate-800 rounded">Level ${r.priority}</span></td>
+                    ${priorityCell}
                     <td class="py-3.5 px-4"><span class="px-2.5 py-1 rounded-full text-3xs font-bold uppercase ${statusColor}">${r.status}</span></td>
                     <td class="py-3.5 px-4 text-right">
                         <button onclick="openDetailModal('${r.id}')" class="text-xs text-[#00E5B0] hover:underline font-semibold bg-[#00E5B0]/10 hover:bg-[#00E5B0]/20 px-3 py-1.5 rounded-lg transition-all">Details</button>
@@ -1032,14 +1048,34 @@
             }
 
             document.getElementById("modalDept").textContent = r.department;
-            document.getElementById("modalPriority").textContent = `Lvl ${r.priority}`;
+            
+            const isCitizen = (!currentUser || currentUser.activeRole === 'citizen' || currentUser.role === 'citizen');
+            const modalPriorityContainer = document.getElementById("modalPriorityContainer");
+            if (modalPriorityContainer) {
+                if (isCitizen) {
+                    modalPriorityContainer.classList.add("hidden");
+                } else {
+                    modalPriorityContainer.classList.remove("hidden");
+                    document.getElementById("modalPriority").textContent = `Lvl ${r.priority}`;
+                }
+            }
+            
             document.getElementById("modalDate").textContent = new Date(r.created_at).toLocaleString();
             document.getElementById("modalDesc").textContent = r.description || "No description provided.";
             
             // Populate reporter details
             document.getElementById("modalReporterAvatar").src = r.reporter_avatar || 'https://api.dicebear.com/7.x/bottts/svg?seed=anonymous';
             document.getElementById("modalReporterName").textContent = r.reporter_name || 'Anonymous';
-            document.getElementById("modalReporterEmail").textContent = r.reporter_email || 'anonymous@civicfix.org';
+            
+            const emailSpan = document.getElementById("modalReporterEmail");
+            if (emailSpan) {
+                if (isCitizen) {
+                    emailSpan.classList.add("hidden");
+                } else {
+                    emailSpan.classList.remove("hidden");
+                    emailSpan.textContent = r.reporter_email || 'anonymous@civicfix.org';
+                }
+            }
             
             // Render Status badge
             const statusLabel = document.getElementById("modalStatus");
@@ -1114,12 +1150,16 @@
                             const dotColor = isCompleted ? "bg-emerald-500 text-slate-950 font-bold" : "bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse font-bold";
                             const dotIcon = isCompleted ? "✓" : "⚡";
                             
+                            const formattedTime = (event.timestamp && !isNaN(Date.parse(event.timestamp)))
+                                ? new Date(event.timestamp).toLocaleString()
+                                : (event.timestamp || 'Pending');
+
                             step.innerHTML = `
                                 <div class="absolute -left-6 top-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${dotColor}">${dotIcon}</div>
                                 <div class="flex flex-col">
                                     <div class="flex items-center justify-between">
                                         <span class="font-bold text-slate-200">${event.title}</span>
-                                        <span class="text-3xs text-slate-500">${event.timestamp ? new Date(event.timestamp).toLocaleString() : 'Pending'}</span>
+                                        <span class="text-3xs text-slate-500">${formattedTime}</span>
                                     </div>
                                     <span class="text-slate-400 text-2xs mt-0.5">${event.description}</span>
                                 </div>
