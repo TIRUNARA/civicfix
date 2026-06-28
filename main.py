@@ -392,11 +392,47 @@ async def vote_report(id: str):
     return {"id": id, "votes": new_votes, "priority": new_priority}
 
 @app.get("/api/reports/list")
-async def list_reports():
+async def list_reports(role: str = "citizen", email: str = None, user_id: str = None):
     conn = database.get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM reports")
-    rows = cursor.fetchall()
+    
+    dept_filter = None
+    if email:
+        email_lower = email.lower()
+        if "road" in email_lower:
+            dept_filter = "Municipal Roads"
+        elif "water" in email_lower or "sanit" in email_lower:
+            dept_filter = "Water & Sanitation"
+        elif "elect" in email_lower or "light" in email_lower or "power" in email_lower:
+            dept_filter = "Electricity & Power"
+        elif "garbage" in email_lower or "solid" in email_lower:
+            dept_filter = "Garbage & Waste"
+
+    if role == "officer" or role == "citizen":
+        cursor.execute("SELECT * FROM reports ORDER BY created_at DESC")
+        rows = cursor.fetchall()
+    elif role == "reviewer":
+        cursor.execute("""
+            SELECT DISTINCT r.* FROM reports r
+            LEFT JOIN reviewer_assignments ra ON r.id = ra.report_id
+            WHERE ra.reviewer_id = ? OR 
+                  (? IS NOT NULL AND r.department LIKE ?)
+            ORDER BY r.created_at DESC
+        """, (user_id, dept_filter, f"%{dept_filter}%" if dept_filter else None))
+        rows = cursor.fetchall()
+    elif role == "fixer":
+        cursor.execute("""
+            SELECT DISTINCT r.* FROM reports r
+            LEFT JOIN fixer_assignments fa ON r.id = fa.report_id
+            WHERE fa.fixer_id = ? OR 
+                  (? IS NOT NULL AND r.department LIKE ?)
+            ORDER BY r.created_at DESC
+        """, (user_id, dept_filter, f"%{dept_filter}%" if dept_filter else None))
+        rows = cursor.fetchall()
+    else:
+        cursor.execute("SELECT * FROM reports ORDER BY created_at DESC")
+        rows = cursor.fetchall()
+
     conn.close()
     return [dict(row) for row in rows]
 
@@ -410,6 +446,96 @@ async def track_report(id: str):
     if not row:
         raise HTTPException(status_code=404, detail="Report not found")
     return dict(row)
+
+@app.get("/api/reports/timeline/{id}")
+async def get_report_timeline(id: str):
+    conn = database.get_db()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM reports WHERE id = ?", (id,))
+    r = cursor.fetchone()
+    if not r:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    events = []
+    
+    # 1. Submission
+    events.append({
+        "title": "Report Submitted",
+        "description": f"Citizen logged hazard ticket. Original Priority Lvl: {r['priority']}.",
+        "timestamp": r["created_at"],
+        "status": "completed",
+        "epoch": r["created_at"]
+    })
+    
+    # 2. AI Routing
+    events.append({
+        "title": "AI Routing Completed",
+        "description": f"CivicFix AI analyzed tags {r['tags']} and routed report to: {r['department']}.",
+        "timestamp": r["created_at"], # AI routing is instant
+        "status": "completed",
+        "epoch": r["created_at"]
+    })
+    
+    # 3. Department Approvals
+    cursor.execute("SELECT * FROM report_approvals WHERE report_id = ?", (id,))
+    approvals = cursor.fetchall()
+    for app in approvals:
+        is_approved = app["status"] == "Approved"
+        events.append({
+            "title": f"Approval: {app['department']}",
+            "description": f"Status: {app['status']} " + (f"by {app['officer_email']}" if is_approved else "(Awaiting validation)"),
+            "timestamp": app["approved_at"] if app["approved_at"] else "Awaiting action",
+            "status": "completed" if is_approved else "active",
+            "epoch": app["approved_at"] if app["approved_at"] else "9999-12-31"
+        })
+        
+    # 4. Reviewer diagnostics
+    cursor.execute("SELECT * FROM reviewer_assignments WHERE report_id = ?", (id,))
+    revs = cursor.fetchall()
+    for rv in revs:
+        is_done = rv["status"] == "Completed" or rv["completed_at"] is not None
+        events.append({
+            "title": f"Field Audit: {rv['department']}",
+            "description": f"Reviewer {rv['reviewer_id']} audit: " + (f"Complete. Resources logged: {rv['resources_logged']}. Location: {rv['end_latitude']}, {rv['end_longitude']}." if is_done else "Dispatched to site."),
+            "timestamp": rv["completed_at"] if rv["completed_at"] else "In progress",
+            "status": "completed" if is_done else "active",
+            "epoch": rv["completed_at"] if rv["completed_at"] else "9999-12-31"
+        })
+        
+    # 5. Fixer dispatches
+    cursor.execute("SELECT * FROM fixer_assignments WHERE report_id = ?", (id,))
+    fixes = cursor.fetchall()
+    for fx in fixes:
+        is_done = fx["status"] == "Completed" or fx["completed_at"] is not None
+        events.append({
+            "title": f"Repair Dispatch: {fx['department']}",
+            "description": f"Ground crew {fx['fixer_id']} assigned. Status: {fx['status']}.",
+            "timestamp": fx["completed_at"] if fx["completed_at"] else "Dispatched / fixing",
+            "status": "completed" if is_done else "active",
+            "epoch": fx["completed_at"] if fx["completed_at"] else "9999-12-31"
+        })
+        
+    # 6. Final resolution
+    if r["status"] == "Resolved":
+        events.append({
+            "title": "Resolution Verified",
+            "description": "Officer verified completion image. Ticket closed successfully.",
+            "timestamp": r["updated_at"],
+            "status": "completed",
+            "epoch": r["updated_at"]
+        })
+    
+    # Sort events by timestamp (completed first, then active/pending)
+    events.sort(key=lambda x: x["epoch"])
+    
+    # Clean epochs from return
+    for ev in events:
+        ev.pop("epoch", None)
+        
+    conn.close()
+    return events
 
 @app.get("/api/leaderboard")
 async def get_leaderboard():

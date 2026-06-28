@@ -293,6 +293,15 @@
                     <div class="flex flex-wrap gap-1.5" id="modalTags"></div>
                 </div>
 
+                <!-- Reviewer Diagnostic Handover Card for Fixers -->
+                <div id="modalInspectionCardSection" class="hidden space-y-4 border-t border-white/5 pt-4 bg-slate-900/40 p-4 rounded-2xl border border-white/5">
+                    <span class="text-2xs font-semibold text-[#00E5B0] uppercase tracking-wider block">📋 Inspection Diagnostic Spec (Handover)</span>
+                    <div class="space-y-2 text-xs">
+                        <div><span class="text-slate-400">Inspected Coordinates:</span> <span id="handoverCoords" class="text-white font-mono"></span></div>
+                        <div><span class="text-slate-400">Required Materials & Resources:</span> <span id="handoverResources" class="text-white font-semibold"></span></div>
+                    </div>
+                </div>
+
                 <!-- Segment 1 Approval Section -->
                 <div id="modalApprovalSection" class="hidden space-y-3 border-t border-white/5 pt-4">
                     <span class="text-2xs font-semibold text-slate-500 uppercase tracking-wider block">Department Approvals</span>
@@ -320,6 +329,14 @@
                         <button id="submitReviewBtn" class="w-full bg-[#00E5B0] hover:bg-[#00c294] text-slate-950 text-xs font-bold py-2 px-4 rounded-xl transition-all font-semibold">
                             Complete Diagnostic & Log GPS Location
                         </button>
+                    </div>
+                </div>
+
+                <!-- Chronological Progress Timeline UI -->
+                <div class="space-y-3 bg-slate-950/60 p-4 rounded-2xl border border-white/5">
+                    <span class="text-2xs font-semibold text-slate-400 uppercase tracking-wider block">📍 Progress Timeline</span>
+                    <div id="modalTimelineContainer" class="space-y-4 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-white/10 pl-6 text-xs">
+                        <!-- Dynamically populated steps -->
                     </div>
                 </div>
 
@@ -731,8 +748,12 @@
             try {
                 const email = currentUser.email;
                 const activeRole = currentUser && currentUser.activeRole;
-                const isStaff = activeRole === 'officer' || activeRole === 'reviewer' || activeRole === 'fixer';
-                const url = isStaff ? "/api/reports/list" : `/api/reports/my-reports/${email}`;
+                let url;
+                if (activeRole === 'officer' || activeRole === 'reviewer' || activeRole === 'fixer') {
+                    url = `/api/reports/list?role=${activeRole}&email=${encodeURIComponent(email || '')}&user_id=${encodeURIComponent(currentUser.id || '')}`;
+                } else {
+                    url = `/api/reports/my-reports/${email}`;
+                }
                 const rResp = await fetch(url);
                 const reports = await rResp.json();
                 activeReports = reports;
@@ -891,8 +912,59 @@
             document.getElementById("modalApprovalSection").classList.add("hidden");
             document.getElementById("modalReviewerActionSection").classList.add("hidden");
             document.getElementById("modalCoordinationChatSection").classList.add("hidden");
+            document.getElementById("modalInspectionCardSection").classList.add("hidden");
 
             const activeRole = document.getElementById("roleToggle").value;
+
+            // Load Reviewer Diagnostic Handover Card if a completed assignment exists
+            fetch(`/api/reviewer/assignments/${r.id}`)
+                .then(res => res.json())
+                .then(assignments => {
+                    const completedAssignment = assignments.find(a => a.status === 'Completed' || a.completed_at);
+                    const handoverSection = document.getElementById("modalInspectionCardSection");
+                    if (completedAssignment) {
+                        handoverSection.classList.remove("hidden");
+                        document.getElementById("handoverCoords").textContent = `${completedAssignment.end_latitude || 'N/A'}, ${completedAssignment.end_longitude || 'N/A'}`;
+                        document.getElementById("handoverResources").textContent = completedAssignment.resources_logged || "None specified.";
+                    }
+                })
+                .catch(err => console.error("Error loading reviewer handover card", err));
+
+            // Load and render chronological progress timeline
+            fetch(`/api/reports/timeline/${r.id}`)
+                .then(res => res.json())
+                .then(timeline => {
+                    const container = document.getElementById("modalTimelineContainer");
+                    container.innerHTML = "";
+                    if (timeline && timeline.length > 0) {
+                        timeline.forEach(event => {
+                            const step = document.createElement("div");
+                            step.className = "relative mb-4 last:mb-0";
+                            
+                            const isCompleted = event.status === "completed";
+                            const dotColor = isCompleted ? "bg-emerald-500 text-slate-950 font-bold" : "bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse font-bold";
+                            const dotIcon = isCompleted ? "✓" : "⚡";
+                            
+                            step.innerHTML = `
+                                <div class="absolute -left-6 top-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${dotColor}">${dotIcon}</div>
+                                <div class="flex flex-col">
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-bold text-slate-200">${event.title}</span>
+                                        <span class="text-3xs text-slate-500">${event.timestamp ? new Date(event.timestamp).toLocaleString() : 'Pending'}</span>
+                                    </div>
+                                    <span class="text-slate-400 text-2xs mt-0.5">${event.description}</span>
+                                </div>
+                            `;
+                            container.appendChild(step);
+                        });
+                    } else {
+                        container.innerHTML = `<span class="text-slate-500 italic">No timeline data available.</span>`;
+                    }
+                })
+                .catch(err => {
+                    console.error("Error loading progress timeline", err);
+                    document.getElementById("modalTimelineContainer").innerHTML = `<span class="text-slate-500 italic">Failed to load timeline.</span>`;
+                });
 
             // 2. Fetch approvals for this report
             fetch(`/api/reports/approvals/${r.id}`)
@@ -1154,7 +1226,13 @@
                 currentUser.activeRole = role;
                 localStorage.setItem("user", JSON.stringify(currentUser));
             }
-            showToast(`🔄 Role switched to: ${role === 'officer' ? 'Municipal Officer' : 'Citizen'}`, "info");
+            const roleNames = {
+                citizen: 'Citizen Mode',
+                officer: 'Municipal Officer',
+                reviewer: 'Field Reviewer',
+                fixer: 'Ground Crew Fixer'
+            };
+            showToast(`🔄 Role switched to: ${roleNames[role] || role}`, "info");
             loadDashboardData();
         }
     </script>
