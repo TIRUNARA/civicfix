@@ -519,6 +519,11 @@
                 });
                 formData.append("latitude", pos.coords.latitude);
                 formData.append("longitude", pos.coords.longitude);
+                if (currentUser) {
+                    formData.append("reporter_email", currentUser.email || "");
+                    formData.append("reporter_name", currentUser.name || "");
+                    formData.append("reporter_avatar", currentUser.avatar || "");
+                }
                 
                 let url = "/api/reports/submit";
                 const params = new URLSearchParams(window.location.search);
@@ -535,13 +540,33 @@
                     });
                     
                     if (resp.ok) {
-                        showToast("✅ Photos successfully uploaded to draft!", "success");
+                        showToast("✅ Photos successfully uploaded!", "success");
                         mobileCapturedBlobs = [];
                         renderMobileThumbnails();
                         if (sessionToken) {
-                            setTimeout(() => {
-                                window.location.href = window.location.origin;
-                            }, 2000);
+                            document.getElementById("mobileCameraView").classList.add("hidden");
+                            const mobileSuccess = document.createElement("div");
+                            mobileSuccess.id = "mobileQrSuccessScreen";
+                            mobileSuccess.className = "glass-panel rounded-3xl border border-white/10 p-8 space-y-6 text-center max-w-md mx-auto";
+                            mobileSuccess.innerHTML = `
+                                <span class="text-5xl">🎉</span>
+                                <div class="space-y-2">
+                                    <h2 class="text-2xl font-bold text-white">Upload Complete!</h2>
+                                    <p class="text-slate-400 text-xs">Your photos have been successfully sent to your desktop screen.</p>
+                                </div>
+                                <div class="max-w-xs mx-auto glass-card rounded-2xl p-5 border border-white/5 text-xs text-left space-y-2">
+                                    <p class="text-slate-300 text-center leading-relaxed font-semibold">
+                                        Please return to your desktop browser. The page has updated automatically with your photos and AI diagnostics.
+                                    </p>
+                                </div>
+                                <div class="flex justify-center gap-4 pt-4">
+                                    <a href="/" class="px-5 py-2.5 bg-accent hover:bg-[#00c294] text-slate-950 font-bold rounded-xl text-xs transition-all shadow-md">Go to Dashboard</a>
+                                </div>
+                            `;
+                            document.getElementById("mobileCameraView").parentNode.appendChild(mobileSuccess);
+                        } else {
+                            const savedReport = await resp.json();
+                            showSuccessScreen(savedReport);
                         }
                     } else {
                         showToast("❌ Image upload failed.", "error");
@@ -566,6 +591,11 @@
                 });
                 formData.append("latitude", pos.coords.latitude);
                 formData.append("longitude", pos.coords.longitude);
+                if (currentUser) {
+                    formData.append("reporter_email", currentUser.email || "");
+                    formData.append("reporter_name", currentUser.name || "");
+                    formData.append("reporter_avatar", currentUser.avatar || "");
+                }
 
                 let url = "/api/reports/submit";
                 const params = new URLSearchParams(window.location.search);
@@ -580,9 +610,29 @@
                     if (resp.ok) {
                         showToast("✅ File(s) successfully uploaded!", "success");
                         if (sessionToken) {
-                            setTimeout(() => {
-                                window.location.href = window.location.origin;
-                            }, 2000);
+                            document.getElementById("mobileCameraView").classList.add("hidden");
+                            const mobileSuccess = document.createElement("div");
+                            mobileSuccess.id = "mobileQrSuccessScreen";
+                            mobileSuccess.className = "glass-panel rounded-3xl border border-white/10 p-8 space-y-6 text-center max-w-md mx-auto";
+                            mobileSuccess.innerHTML = `
+                                <span class="text-5xl">🎉</span>
+                                <div class="space-y-2">
+                                    <h2 class="text-2xl font-bold text-white">Upload Complete!</h2>
+                                    <p class="text-slate-400 text-xs">Your photos have been successfully sent to your desktop screen.</p>
+                                </div>
+                                <div class="max-w-xs mx-auto glass-card rounded-2xl p-5 border border-white/5 text-xs text-left space-y-2">
+                                    <p class="text-slate-300 text-center leading-relaxed font-semibold">
+                                        Please return to your desktop browser. The page has updated automatically with your photos and AI diagnostics.
+                                    </p>
+                                </div>
+                                <div class="flex justify-center gap-4 pt-4">
+                                    <a href="/" class="px-5 py-2.5 bg-accent hover:bg-[#00c294] text-slate-950 font-bold rounded-xl text-xs transition-all shadow-md">Go to Dashboard</a>
+                                </div>
+                            `;
+                            document.getElementById("mobileCameraView").parentNode.appendChild(mobileSuccess);
+                        } else {
+                            const savedReport = await resp.json();
+                            showSuccessScreen(savedReport);
                         }
                     } else {
                         showToast("❌ File upload failed.", "error");
@@ -823,6 +873,15 @@
         }
 
         function showSuccessScreen(report) {
+            const isMobileView = !document.getElementById("mobileCameraView").classList.contains("hidden");
+            if (isMobileView) {
+                document.getElementById("mobileCameraView").classList.add("hidden");
+                document.getElementById("desktopWizardView").classList.remove("hidden");
+                // Hide the step navigation dot bar on mobile success
+                document.querySelector("#desktopWizardView > div.flex.items-center.justify-between")?.classList.add("hidden");
+            }
+
+            document.getElementById("panelStep1").classList.add("hidden");
             document.getElementById("panelStep2").classList.add("hidden");
             document.getElementById("panelStep3").classList.remove("hidden");
             

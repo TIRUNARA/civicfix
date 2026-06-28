@@ -744,7 +744,10 @@ async def upload_session_photo(
     images: List[UploadFile] = File(None),
     image: UploadFile = File(None),
     latitude: float = Form(...),
-    longitude: float = Form(...)
+    longitude: float = Form(...),
+    reporter_email: Optional[str] = Form(None),
+    reporter_name: Optional[str] = Form(None),
+    reporter_avatar: Optional[str] = Form(None)
 ):
     conn = database.get_db()
     cursor = conn.cursor()
@@ -785,20 +788,27 @@ async def upload_session_photo(
         base64_url = f"data:image/jpeg;base64,{encoded}"
         final_db_paths.append(base64_url)
         
-    # Determine reporter settings from draft_data
-    reporter_email = "anonymous@civicfix.org"
-    reporter_name = "Anonymous"
-    reporter_avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=anonymous"
+    # Determine reporter settings from request parameters or fallback to draft_data
+    final_email = "anonymous@civicfix.org"
+    final_name = "Anonymous"
+    final_avatar = "https://api.dicebear.com/7.x/bottts/svg?seed=anonymous"
     
-    if row["draft_data"]:
+    if reporter_email:
+        final_email = reporter_email
+    if reporter_name:
+        final_name = reporter_name
+    if reporter_avatar:
+        final_avatar = reporter_avatar
+        
+    if (not reporter_email or not reporter_name) and row["draft_data"]:
         try:
             meta = json.loads(row["draft_data"])
-            if meta.get("reporter_email"):
-                reporter_email = meta["reporter_email"]
-            if meta.get("reporter_name"):
-                reporter_name = meta["reporter_name"]
-            if meta.get("reporter_avatar"):
-                reporter_avatar = meta["reporter_avatar"]
+            if not reporter_email and meta.get("reporter_email"):
+                final_email = meta["reporter_email"]
+            if not reporter_name and meta.get("reporter_name"):
+                final_name = meta["reporter_name"]
+            if not reporter_avatar and meta.get("reporter_avatar"):
+                final_avatar = meta["reporter_avatar"]
         except Exception:
             pass
             
@@ -808,7 +818,7 @@ async def upload_session_photo(
     background_tasks.add_task(
         async_process_draft_ai, 
         token, final_db_paths, latitude, longitude, 
-        reporter_email, reporter_name, reporter_avatar
+        final_email, final_name, final_avatar
     )
     
     return {"status": "processing"}
