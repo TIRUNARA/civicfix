@@ -157,12 +157,17 @@ def async_process_report_ai(report_id: str, final_db_paths: list, user_note: str
                 conn = database.get_db()
             cursor = conn.cursor()
             cursor.execute(
-                "UPDATE reports SET status = 'Failed', description = ? WHERE id = ?",
-                (f"AI processing failed: {str(e)[:200]}", report_id)
+                "UPDATE reports SET status = 'Pending', department = 'Other Issues', description = ?, priority = 3, updated_at = ? WHERE id = ?",
+                ("AI Triage system is temporarily offline or rate-limited. CivicFix has automatically routed this report using default department guidelines.", datetime.now(timezone.utc).isoformat(), report_id)
+            )
+            cursor.execute("DELETE FROM report_approvals WHERE report_id = ?", (report_id,))
+            cursor.execute(
+                "INSERT OR IGNORE INTO report_approvals (report_id, department, status) VALUES (?, 'Other Issues', 'Pending')",
+                (report_id,)
             )
             conn.commit()
         except Exception as db_err:
-            print(f"Failed to write failure status to DB: {db_err}")
+            print(f"Failed to write fallback status to DB: {db_err}")
     finally:
         if conn:
             conn.close()
@@ -613,6 +618,7 @@ from pydantic import BaseModel
 class ApproveRequest(BaseModel):
     department: str
     officer_email: str
+    bypass_reviewer: Optional[bool] = False
 
 class ReviewerAnalysisRequest(BaseModel):
     report_id: str
@@ -1055,14 +1061,20 @@ async def approve_report(id: str, req: ApproveRequest):
     all_approved = all([r["status"] == "Approved" for r in all_approvals])
     
     if all_approved and len(all_approvals) > 0:
-        # Transition status to Segment 2
-        cursor.execute("UPDATE reports SET status = 'Reviewing', updated_at = ? WHERE id = ?", (now_str, id))
-        conn.commit()
-        conn.close()
-        
-        # TRIGGER Dynamic Reviewer Assignment
-        await trigger_reviewer_assignment(id)
-        return {"status": "Reviewing", "message": "All departments approved. Reviewers assigned."}
+        if req.bypass_reviewer:
+            conn.commit()
+            conn.close()
+            await trigger_fixer_dispatch(id)
+            return {"status": "Fixing", "message": "All departments approved. Bypassed reviewer and dispatched ground crew."}
+        else:
+            # Transition status to Segment 2
+            cursor.execute("UPDATE reports SET status = 'Reviewing', updated_at = ? WHERE id = ?", (now_str, id))
+            conn.commit()
+            conn.close()
+            
+            # TRIGGER Dynamic Reviewer Assignment
+            await trigger_reviewer_assignment(id)
+            return {"status": "Reviewing", "message": "All departments approved. Reviewers assigned."}
         
     conn.commit()
     conn.close()
@@ -1078,7 +1090,9 @@ async def get_reviewer_assignments(report_id: str):
     return [dict(r) for r in rows]
 
 @app.get("/api/reports/reviewer-summary/{report_id}")
-async def get_report_reviewer_summary(report_id: str):
+async def get_report_reviewer_summary(report_id: str, role: str = "citizen"):
+    if role not in ["officer", "reviewer", "fixer"]:
+        raise HTTPException(status_code=403, detail="Access denied. General public cannot view AI diagnostic summaries.")
     conn = database.get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT id, department, description FROM reports WHERE id = ?", (report_id,))
