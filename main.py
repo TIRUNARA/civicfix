@@ -949,6 +949,9 @@ async def trigger_reviewer_assignment(report_id: str):
     lat, lon, dept_str = report["latitude"], report["longitude"], report["department"]
     depts = [d.strip() for d in dept_str.split(",") if d.strip()]
     
+    # Define primary demo reviewer IDs visible in the frontend dashboard dropdown
+    DEMO_REVIEWER_IDS = {"REV-01", "REV-03", "REV-05", "REV-06", "REV-07", "REV-08", "REV-09", "REV-10", "REV-11"}
+    
     for dept in depts:
         # Find available reviewers in this department
         cursor.execute("SELECT id, latitude, longitude FROM reviewers WHERE department = ? AND is_available = 1", (dept,))
@@ -968,14 +971,26 @@ async def trigger_reviewer_assignment(report_id: str):
         if not reviewers:
             continue
             
-        # Find nearest reviewer
-        nearest_reviewer = None
-        min_dist = float("inf")
-        for rev in reviewers:
-            dist = get_distance(lat, lon, rev["latitude"], rev["longitude"])
-            if dist < min_dist:
-                min_dist = dist
-                nearest_reviewer = rev
+        # Prioritize demo reviewers first so sandbox mode users can view their assignments
+        demo_revs = [r for r in reviewers if r["id"] in DEMO_REVIEWER_IDS]
+        if demo_revs:
+            # Select the nearest among the available demo reviewers
+            nearest_reviewer = None
+            min_dist = float("inf")
+            for rev in demo_revs:
+                dist = get_distance(lat, lon, rev["latitude"], rev["longitude"])
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest_reviewer = rev
+        else:
+            # Fallback: Find nearest reviewer among all available
+            nearest_reviewer = None
+            min_dist = float("inf")
+            for rev in reviewers:
+                dist = get_distance(lat, lon, rev["latitude"], rev["longitude"])
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest_reviewer = rev
                 
         if nearest_reviewer:
             # Create reviewer assignment
@@ -1005,21 +1020,34 @@ async def trigger_fixer_dispatch(report_id: str):
     
     is_coordinated = 1 if len(depts) > 1 else 0
     
+    # Define primary demo fixer IDs visible in the frontend dashboard dropdown
+    DEMO_FIXER_IDS = {"FIX-01", "FIX-03", "FIX-05", "FIX-06", "FIX-07", "FIX-08", "FIX-09", "FIX-10", "FIX-11"}
+    
     for dept in depts:
-        # Find available fixer in this department
-        cursor.execute("SELECT id FROM fixers WHERE department = ? AND is_available = 1 LIMIT 1", (dept,))
-        fixer = cursor.fetchone()
+        # Find available fixers in this department
+        cursor.execute("SELECT id FROM fixers WHERE department = ? AND is_available = 1", (dept,))
+        fixers = cursor.fetchall()
         
         # Fallback 1: Find any available fixer globally
-        if not fixer:
-            cursor.execute("SELECT id FROM fixers WHERE is_available = 1 LIMIT 1")
-            fixer = cursor.fetchone()
+        if not fixers:
+            cursor.execute("SELECT id FROM fixers WHERE is_available = 1")
+            fixers = cursor.fetchall()
             
         # Fallback 2: Reset all fixers and select one
-        if not fixer:
+        if not fixers:
             cursor.execute("UPDATE fixers SET is_available = 1")
-            cursor.execute("SELECT id FROM fixers LIMIT 1")
-            fixer = cursor.fetchone()
+            cursor.execute("SELECT id FROM fixers")
+            fixers = cursor.fetchall()
+            
+        if not fixers:
+            continue
+            
+        # Prioritize demo fixers first so sandbox mode users can view their assignments
+        demo_fixers = [f for f in fixers if f["id"] in DEMO_FIXER_IDS]
+        if demo_fixers:
+            fixer = demo_fixers[0]
+        else:
+            fixer = fixers[0]
             
         if fixer:
             cursor.execute("""
