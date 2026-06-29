@@ -616,6 +616,32 @@
             return 'citizen';
         }
 
+        function getDepartmentFromReviewerId(id) {
+            if (id === 'REV-01' || id === 'REV-02') return 'Municipal Roads';
+            if (id === 'REV-03' || id === 'REV-04') return 'Water & Sanitation';
+            if (id === 'REV-05') return 'Solid Waste';
+            if (id === 'REV-06') return 'Utility Streetlighting';
+            if (id === 'REV-07') return 'Parks';
+            if (id === 'REV-08') return 'National Highways';
+            if (id === 'REV-09') return 'State Grid';
+            if (id === 'REV-10') return 'Environment Board';
+            if (id === 'REV-11') return 'Other Issues';
+            return '';
+        }
+
+        function getDepartmentFromFixerId(id) {
+            if (id === 'FIX-01' || id === 'FIX-02') return 'Municipal Roads';
+            if (id === 'FIX-03' || id === 'FIX-04') return 'Water & Sanitation';
+            if (id === 'FIX-05') return 'Solid Waste';
+            if (id === 'FIX-06') return 'Utility Streetlighting';
+            if (id === 'FIX-07') return 'Parks';
+            if (id === 'FIX-08') return 'National Highways';
+            if (id === 'FIX-09') return 'State Grid';
+            if (id === 'FIX-10') return 'Environment Board';
+            if (id === 'FIX-11') return 'Other Issues';
+            return '';
+        }
+
         window.onload = function() {
             renderHeaderAuth();
             initializeGoogleSignIn();
@@ -1669,7 +1695,7 @@
                 fetch(`/api/reviewer/assignments/${r.id}`)
                     .then(res => res.json())
                     .then(assignments => {
-                        const myAssignment = assignments.find(a => a.reviewer_id === currentUser.id && a.status === 'Assigned');
+                        const myAssignment = assignments.find(a => (a.reviewer_id === currentUser.id || a.department === getDepartmentFromReviewerId(currentUser.id)) && a.status === 'Assigned');
                         if (myAssignment) {
                             document.getElementById("modalReviewerActionSection").classList.remove("hidden");
                             document.getElementById("reviewerLat").value = r.latitude;
@@ -1746,7 +1772,7 @@
                 fetch(`/api/fixer/assignments/${r.id}`)
                     .then(res => res.json())
                     .then(assignments => {
-                        const myAssignment = assignments.find(a => a.fixer_id === currentUser.id);
+                        const myAssignment = assignments.find(a => a.fixer_id === currentUser.id || a.department === getDepartmentFromFixerId(currentUser.id));
                         if (myAssignment) {
                             document.getElementById("modalFixerActionSection").classList.remove("hidden");
                             

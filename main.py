@@ -481,34 +481,56 @@ async def list_reports(role: str = "citizen", email: str = None, user_id: str = 
             cursor.execute("SELECT * FROM reports ORDER BY created_at DESC")
         rows = cursor.fetchall()
     elif role == "reviewer":
+        reviewer_dept = None
         if user_id:
+            cursor.execute("SELECT department FROM reviewers WHERE id = ?", (user_id,))
+            rev_row = cursor.fetchone()
+            if rev_row:
+                reviewer_dept = rev_row["department"]
+        if not reviewer_dept and dept_filter:
+            reviewer_dept = dept_filter
+
+        if reviewer_dept:
+            cursor.execute("""
+                SELECT DISTINCT r.* FROM reports r
+                LEFT JOIN reviewer_assignments ra ON r.id = ra.report_id
+                WHERE ra.reviewer_id = ? OR ra.reviewer_id IN (SELECT id FROM reviewers WHERE department = ?)
+                ORDER BY r.created_at DESC
+            """, (user_id, reviewer_dept))
+        elif user_id:
             cursor.execute("""
                 SELECT DISTINCT r.* FROM reports r
                 LEFT JOIN reviewer_assignments ra ON r.id = ra.report_id
                 WHERE ra.reviewer_id = ?
                 ORDER BY r.created_at DESC
             """, (user_id,))
-        elif dept_filter:
-            cursor.execute(
-                "SELECT * FROM reports WHERE department LIKE ? ORDER BY created_at DESC",
-                (f"%{dept_filter}%",)
-            )
         else:
             cursor.execute("SELECT * FROM reports ORDER BY created_at DESC")
         rows = cursor.fetchall()
     elif role == "fixer":
+        fixer_dept = None
         if user_id:
+            cursor.execute("SELECT department FROM fixers WHERE id = ?", (user_id,))
+            fix_row = cursor.fetchone()
+            if fix_row:
+                fixer_dept = fix_row["department"]
+        if not fixer_dept and dept_filter:
+            fixer_dept = dept_filter
+
+        if fixer_dept:
+            cursor.execute("""
+                SELECT DISTINCT r.* FROM reports r
+                LEFT JOIN fixer_assignments fa ON r.id = fa.report_id
+                WHERE fa.fixer_id = ? OR fa.fixer_id IN (SELECT id FROM fixers WHERE department = ?)
+                ORDER BY r.created_at DESC
+            """, (user_id, fixer_dept))
+        elif user_id:
             cursor.execute("""
                 SELECT DISTINCT r.* FROM reports r
                 LEFT JOIN fixer_assignments fa ON r.id = fa.report_id
                 WHERE fa.fixer_id = ?
                 ORDER BY r.created_at DESC
             """, (user_id,))
-        elif dept_filter:
-            cursor.execute(
-                "SELECT * FROM reports WHERE department LIKE ? ORDER BY created_at DESC",
-                (f"%{dept_filter}%",)
-            )
         else:
             cursor.execute("SELECT * FROM reports ORDER BY created_at DESC")
         rows = cursor.fetchall()
@@ -1217,11 +1239,22 @@ async def submit_reviewer_analysis(req: ReviewerAnalysisRequest):
     now_str = datetime.now(timezone.utc).isoformat()
     
     # 1. Update the reviewer assignment
-    cursor.execute("""
-        UPDATE reviewer_assignments
-        SET status = 'Completed', resources_logged = ?, completed_at = ?, end_latitude = ?, end_longitude = ?, analysis_image = ?
-        WHERE report_id = ? AND reviewer_id = ?
-    """, (req.resources_logged, now_str, req.end_latitude, req.end_longitude, req.analysis_image, req.report_id, req.reviewer_id))
+    cursor.execute("SELECT department FROM reviewers WHERE id = ?", (req.reviewer_id,))
+    rev_row = cursor.fetchone()
+    rev_dept = rev_row["department"] if rev_row else None
+    
+    if rev_dept:
+        cursor.execute("""
+            UPDATE reviewer_assignments
+            SET status = 'Completed', resources_logged = ?, completed_at = ?, end_latitude = ?, end_longitude = ?, analysis_image = ?, reviewer_id = ?
+            WHERE report_id = ? AND (reviewer_id = ? OR (reviewer_id IN (SELECT id FROM reviewers WHERE department = ?) AND status = 'Assigned'))
+        """, (req.resources_logged, now_str, req.end_latitude, req.end_longitude, req.analysis_image, req.reviewer_id, req.report_id, req.reviewer_id, rev_dept))
+    else:
+        cursor.execute("""
+            UPDATE reviewer_assignments
+            SET status = 'Completed', resources_logged = ?, completed_at = ?, end_latitude = ?, end_longitude = ?, analysis_image = ?
+            WHERE report_id = ? AND reviewer_id = ?
+        """, (req.resources_logged, now_str, req.end_latitude, req.end_longitude, req.analysis_image, req.report_id, req.reviewer_id))
     
     # 2. Update reviewer location and availability
     cursor.execute("""
@@ -1303,11 +1336,23 @@ async def send_coordination_message(req: CoordinationMessageRequest):
 async def fixer_start_work(req: FixerStartWorkRequest):
     conn = database.get_db()
     cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE fixer_assignments 
-        SET status = 'Work in Progress' 
-        WHERE report_id = ? AND fixer_id = ?
-    """, (req.report_id, req.fixer_id))
+    
+    cursor.execute("SELECT department FROM fixers WHERE id = ?", (req.fixer_id,))
+    fix_row = cursor.fetchone()
+    fix_dept = fix_row["department"] if fix_row else None
+    
+    if fix_dept:
+        cursor.execute("""
+            UPDATE fixer_assignments 
+            SET status = 'Work in Progress', fixer_id = ?
+            WHERE report_id = ? AND (fixer_id = ? OR (fixer_id IN (SELECT id FROM fixers WHERE department = ?) AND status = 'Assigned'))
+        """, (req.fixer_id, req.report_id, req.fixer_id, fix_dept))
+    else:
+        cursor.execute("""
+            UPDATE fixer_assignments 
+            SET status = 'Work in Progress' 
+            WHERE report_id = ? AND fixer_id = ?
+        """, (req.report_id, req.fixer_id))
     
     now_str = datetime.now(timezone.utc).isoformat()
     cursor.execute("""
