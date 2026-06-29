@@ -24,31 +24,28 @@ Powered by a **dual-loop AI engine** leveraging **Gemini 2.5**, the system eradi
 
 ---
 
-## 2. Core Problem → Our Solution
+## 2. Core Problem vs. Our Solution
 
 > **The Bottleneck:** Legacy civic portals are crippled by manual triage delays, inaccurate departmental routing, suboptimal field resource allocation, and a high incidence of unverified or fraudulent repair claims.
 
 ### ✅ The CivicFix Solution
 
-| Problem | Solution |
-|---|---|
-| Manual triage & routing | **Dual-Loop AI Triage** — Gemini autonomously evaluates uploads, routes to departments, and generates metadata |
-| Sensitive data leaks | **Strict RBAC** — AI diagnostics & inter-departmental comms hidden from public domain |
-| Emergency bottlenecks | **Direct-Dispatch Pipeline** — Officers bypass inspection protocols for critical emergencies |
-| Fraudulent repair claims | **Visual Verification** — Gemini compares before/after photos to confirm resolution |
+- **Dual-Loop AI Triage & Verification:** Gemini autonomously evaluates citizen image uploads to determine priority, generate metadata tags, and execute department routing. Post-repair, it performs a rigorous visual comparison of "before versus after" documentation to objectively confirm resolution.
+- **Strict Data Partitioning:** A robust role-based access control (RBAC) architecture shields internal AI diagnostics, inter-departmental communications, and priority algorithms from the public domain.
+- **Direct-Dispatch Pipeline:** System administrators can bypass standard inspection protocols for critical emergencies, assigning tasks directly to repair crews to accelerate response times.
 
 ---
 
-## 3. Technical Architecture
+## 3. Technical Architecture Blueprint
 
-CivicFix is built on a high-performance, cloud-native stack optimized for rapid deployment, fault tolerance, and horizontal scalability.
+CivicFix is constructed on a high-performance, cloud-native stack optimized for rapid deployment, fault tolerance, and horizontal scalability. The architecture integrates FastAPI, PostgreSQL, and the Google GenAI SDK to form a cohesive cognitive routing engine.
 
 | Layer | Technology | Function |
 |---|---|---|
-| **Cognitive AI** | Gemini 2.5 (Google GenAI SDK) | Multimodal image analysis, NLP tagging, visual comparative verification |
-| **Backend Core** | Python (FastAPI) | Async request routing, state machine logic, API orchestration |
-| **Data Persistence** | PostgreSQL (Neon) / SQLite | ACID-compliant relational storage with dual-database hot-swap |
-| **Client Interface** | HTML5, CSS3, Vanilla JS + Tailwind | Glassmorphic dashboard, dependency-free, high performance |
+| **Cognitive AI** | Gemini 2.5 (Google GenAI SDK) | Executes multimodal image analysis, NLP tagging, and visual comparative verification. |
+| **Backend Core** | Python (FastAPI) | Manages high-performance asynchronous request routing, state machine logic, and overarching API orchestration. |
+| **Data Persistence** | PostgreSQL (Neon) / SQLite | Provides ACID-compliant, highly scalable relational storage for geographic reports, assignments, and coordination logs with dual-database hot-swap. |
+| **Client Interface** | HTML5, CSS3, Vanilla JS + Tailwind | Delivers a dependency-free, highly responsive Glassmorphic dashboard engineered for maximum performance. |
 
 ### Dual-Database Replication Layer
 CivicFix implements a custom dual-database interface — **SQLite** locally, **PostgreSQL on Neon** in production. The wrapper intercepts SQL at runtime, converting `?` placeholders to `%s` for PostgreSQL, enabling seamless engine hot-swaps without code refactoring.
@@ -60,16 +57,16 @@ Solves desktop reporting limits via an auto-sizing QR code wizard. Mobile users 
 
 ## 4. Role-Based Workflow Matrix
 
-| Role | Authorized Permissions | Restrictions |
+| Role | Authorized Permissions | System Restrictions |
 |---|---|---|
-| **Citizen** (Public) | Submit geotagged reports, view public map, track tickets, upvote issues | No access to AI diagnostics, municipal chat, or priority weighting |
-| **Officer** (Admin) | Approve AI routing, review diagnostics, assign personnel, trigger Direct-Dispatch, close tickets | None — full system admin privileges |
-| **Reviewer** (Inspector) | Receive assignments, log materials/coordinates, upload on-site photos | Cannot override Officer routing or reassign Fixer crews |
-| **Fixer** (Repair Crew) | Access tasks, view resource specs, upload resolution verification photos | Execution-only dashboard; cannot alter global ticket states |
+| **Citizen** (Public) | Submit geolocation-tagged reports, view the public transparent map, track personal ticket statuses, and upvote community infrastructure issues. | Prohibited from accessing internal AI diagnostic telemetry, municipal chat logs, or backend priority weighting. |
+| **Officer** (Admin) | Approve AI-generated routing, review diagnostic summaries, assign field personnel, trigger Direct-Dispatch, and authorize final resolution closures. | No restrictions. Operates with full System Administrator privileges across the platform. |
+| **Reviewer** (Inspector) | Receive targeted geographic assignments, log required structural materials/coordinates, and upload certified on-site inspection photography. | Cannot override Officer routing approvals, reassign Fixer crews, or modify overarching system parameters. |
+| **Fixer** (Repair Crew) | Access assigned execution tasks, view precise Reviewer resource specifications/coordinates, and upload cryptographic final resolution verification photos. | Confined strictly to an execution-only dashboard; unable to alter global ticket states outside of task completion. |
 
 ---
 
-## 5. The 6-Stage Workflow Lifecycle
+## 5. The Multi-Stage Workflow Lifecycle
 
 ```
 [1] TRIAGE          → Citizen submits report + photo. Gemini classifies severity (1-5),
@@ -91,21 +88,28 @@ Solves desktop reporting limits via an auto-sizing QR code wizard. Mobile users 
                        confirmed → ticket cryptographically closed as "Resolved".
 ```
 
+1. **Triage (Pending):** A citizen submits an infrastructure hazard report containing photographic evidence. Gemini instantly analyzes the payload, classifying the priority severity (Levels 1-5), routing it to the appropriate municipal department, and generating precise metadata tags.
+2. **Approval (Awaiting Officer Action):** Municipal Officers review the AI-suggested parameters. They may assign a Field Reviewer for further inspection or trigger the Direct-Dispatch protocol for immediate emergency crew deployment.
+3. **Field Diagnostics (Reviewing):** The designated Field Inspector arrives on-site, logs necessary repair materials, precise coordinates, and uploads an official inspection photograph. The ticket state advances to "Awaiting Review Approval."
+4. **AI Synthesis (Planning):** The Officer reviews the field data. Gemini synthesizes the initial citizen report and the inspector's structural log to generate a comprehensive "AI Resource & Diagnostic Summary," creating a precise blueprint for repair.
+5. **Execution (Work In Progress):** Repair crews (Fixers) are dispatched. They execute the required maintenance based on the AI blueprint and upload a final "resolved" photograph upon completion.
+6. **Dual-Loop Verification (Resolved):** Gemini performs a rigorous multimodal comparison between the initial hazard documentation and the final repair photograph. Upon successful visual confirmation, the ticket is cryptographically closed and marked as "Resolved."
+
 ---
 
 ## 6. Key Engineering Innovations
 
 ### 🧠 AI Diagnostics & Double-Blind Verification
-- **Automated Classification** — Extracts tags, maps to 8-department taxonomy, computes severity
-- **Before/After Verification** — Gemini vision compares original and resolution photos before closing tickets — no false sign-offs possible
+- **Automated Classification:** Extracts tags, maps to 8-department taxonomy, computes severity.
+- **Before/After Verification:** Gemini vision compares original and resolution photos before closing tickets — no false sign-offs possible.
 
 ### 🔒 Security Hardening
-- **Path Traversal Prevention** — `pathlib` validates all file requests stay within upload boundaries; `../` sequences rejected with `403 Forbidden`
-- **SQL Parameterization** — All user inputs compiled as tuple parameters; no raw string concatenation
-- **Image Deserialization Safety** — Strict JSON parsing loops confirm file existence before PIL processing
+- **Path Traversal Prevention:** `pathlib` validates all file requests stay within upload boundaries; `../` sequences rejected with `403 Forbidden`.
+- **SQL Parameterization:** All user inputs compiled as tuple parameters; no raw string concatenation.
+- **Image Deserialization Safety:** Strict JSON parsing loops confirm file existence before PIL processing.
 
 ### 📊 Leaderboard Upserts
-PostgreSQL `ON CONFLICT (email) DO UPDATE` — dynamically increments civic points without unique key violations
+- PostgreSQL `ON CONFLICT (email) DO UPDATE` — dynamically increments civic points without unique key violations.
 
 ---
 
@@ -143,12 +147,61 @@ civicfix/
 │   ├── test_multistage_flow.py
 │   ├── test_reviewers.py
 │   └── ...
-└── docs/                    # Architecture diagrams & documentation
+└── docs/                    # Architecture diagrams, screenshots & documentation
+    └── screenshots/         # Step-by-step running application screenshots
 ```
 
 ---
 
-## 9. Getting Started
+## 9. Application Walkthrough & Stage Gallery
+
+Here is the step-by-step chronological gallery of the running project, showcasing the UI and features through the various stages of reporting and repair:
+
+### Step 1: Main Portal Landing Page & Dashboard Hub
+![Step 1](docs/screenshots/Screenshot_2026-06-29_05-46-35.png)
+
+### Step 2: Citizen Hazard Reporting Portal & QR Integration Wizard
+![Step 2](docs/screenshots/Screenshot_2026-06-29_05-47-03.png)
+
+### Step 3: Interactive Hazard Geolocation & Map Coordinates Selection
+![Step 3](docs/screenshots/Screenshot_2026-06-29_05-47-20.png)
+
+### Step 4: Submission State & Automatic Metadata Triage Ingestion
+![Step 4](docs/screenshots/Screenshot_2026-06-29_05-47-45.png)
+
+### Step 5: Officer Administrative Control Dashboard & Approvals Queue
+![Step 5](docs/screenshots/Screenshot_2026-06-29_05-48-16.png)
+
+### Step 6: AI-Suggested Departmental Routing & Priority Calibration
+![Step 6](docs/screenshots/Screenshot_2026-06-29_05-49-29.png)
+
+### Step 7: Dynamic Field Reviewer Assignment & Coordinate Mapping
+![Step 7](docs/screenshots/Screenshot_2026-06-29_05-50-13.png)
+
+### Step 8: Inspector Dispatch & Active Tasks Execution Queue
+![Step 8](docs/screenshots/Screenshot_2026-06-29_05-50-47.png)
+
+### Step 9: Field Diagnostic Log Submission Form & Materials Logger
+![Step 9](docs/screenshots/Screenshot_2026-06-29_05-51-17.png)
+
+### Step 10: AI Synthesis, Resource Planning & Dispatch Specifications
+![Step 10](docs/screenshots/Screenshot_2026-06-29_06-18-22.png)
+
+### Step 11: Fixer Crew Work Initiation Portal & Progress Tracking
+![Step 11](docs/screenshots/Screenshot_2026-06-29_06-19-12.png)
+
+### Step 12: Active Work-in-Progress Status Update & Coordination Hub
+![Step 12](docs/screenshots/Screenshot_2026-06-29_06-20-04.png)
+
+### Step 13: Work Completion Proof Submission & Before-After Uploads
+![Step 13](docs/screenshots/Screenshot_2026-06-29_06-23-05.png)
+
+### Step 14: Gemini Multimodal Comparative Verification & Ticket Closure
+![Step 14](docs/screenshots/Screenshot_2026-06-29_06-23-20.png)
+
+---
+
+## 10. Getting Started
 
 ```bash
 # 1. Clone the repo
@@ -173,13 +226,13 @@ Visit **http://localhost:8000** — the portal is live.
 
 ---
 
-## 10. Vibe2Ship Value Proposition
+## 11. Vibe2Ship Value Proposition
 
 > CivicFix transcends standard CRUD ticketing — it establishes a **cognitive infrastructure layer** for modern municipal governance.
 
-- 🚀 **Eradicates Administrative Bloat** — Autonomous triage, routing, and resource planning free up municipal budgets for actual repairs
-- 🔐 **Enforces Accountability** — Dual-Loop Verification ensures no contractor can claim completion without AI-verified visual proof
-- ⚡ **Delivers Immediate ROI** — Direct-Dispatch compresses emergency response from weeks to hours
+- 🚀 **Eradicates Administrative Bloat** — Autonomous triage, routing, and resource planning free up municipal budgets for actual repairs.
+- 🔐 **Enforces Accountability** — Dual-Loop Verification ensures no contractor can claim completion without AI-verified visual proof.
+- ⚡ **Delivers Immediate ROI** — Direct-Dispatch compresses emergency response from weeks to hours.
 
 ---
 
