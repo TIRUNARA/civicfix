@@ -423,6 +423,50 @@ async def list_reports(role: str = "citizen", email: str = None, user_id: str = 
         elif "other" in email_lower:
             dept_filter = "Other Issues"
 
+    # Resolve undefined or empty user_id using the email address pattern
+    if not user_id or user_id == "undefined":
+        user_id = None
+        if email:
+            email_lower = email.lower()
+            if role == "reviewer":
+                if "road.reviewer" in email_lower or "rajesh" in email_lower:
+                    user_id = "REV-01"
+                elif "water.reviewer" in email_lower or "priya" in email_lower:
+                    user_id = "REV-03"
+                elif "waste.reviewer" in email_lower or "sunil" in email_lower:
+                    user_id = "REV-05"
+                elif "light.reviewer" in email_lower or "deepa" in email_lower:
+                    user_id = "REV-06"
+                elif "park.reviewer" in email_lower or "vikram" in email_lower:
+                    user_id = "REV-07"
+                elif "highway.reviewer" in email_lower or "sonia" in email_lower:
+                    user_id = "REV-08"
+                elif "grid.reviewer" in email_lower or "rahul" in email_lower:
+                    user_id = "REV-09"
+                elif "environ.reviewer" in email_lower or "anjali" in email_lower:
+                    user_id = "REV-10"
+                elif "other.reviewer" in email_lower:
+                    user_id = "REV-11"
+            elif role == "fixer":
+                if "road.fixer" in email_lower:
+                    user_id = "FIX-01"
+                elif "water.fixer" in email_lower:
+                    user_id = "FIX-03"
+                elif "waste.fixer" in email_lower:
+                    user_id = "FIX-05"
+                elif "light.fixer" in email_lower:
+                    user_id = "FIX-06"
+                elif "park.fixer" in email_lower:
+                    user_id = "FIX-07"
+                elif "highway.fixer" in email_lower:
+                    user_id = "FIX-08"
+                elif "grid.fixer" in email_lower:
+                    user_id = "FIX-09"
+                elif "environ.fixer" in email_lower:
+                    user_id = "FIX-10"
+                elif "other.fixer" in email_lower:
+                    user_id = "FIX-11"
+
     if role == "citizen":
         cursor.execute("SELECT * FROM reports ORDER BY created_at DESC")
         rows = cursor.fetchall()

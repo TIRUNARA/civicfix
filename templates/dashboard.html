@@ -631,6 +631,37 @@
                     currentUser.activeRole = currentUser.role;
                     localStorage.setItem("user", JSON.stringify(currentUser));
                 }
+                if (!currentUser.id) {
+                    const role = currentUser.role;
+                    let resolvedId = currentUser.email;
+                    if (role === 'reviewer') {
+                        const emailLower = currentUser.email.toLowerCase();
+                        if (emailLower.includes('road.reviewer') || emailLower.includes('rajesh')) resolvedId = "REV-01";
+                        else if (emailLower.includes('water.reviewer') || emailLower.includes('priya')) resolvedId = "REV-03";
+                        else if (emailLower.includes('waste.reviewer') || emailLower.includes('sunil')) resolvedId = "REV-05";
+                        else if (emailLower.includes('light.reviewer') || emailLower.includes('deepa')) resolvedId = "REV-06";
+                        else if (emailLower.includes('park.reviewer') || emailLower.includes('vikram')) resolvedId = "REV-07";
+                        else if (emailLower.includes('highway.reviewer') || emailLower.includes('sonia')) resolvedId = "REV-08";
+                        else if (emailLower.includes('grid.reviewer') || emailLower.includes('rahul')) resolvedId = "REV-09";
+                        else if (emailLower.includes('environ.reviewer') || emailLower.includes('anjali')) resolvedId = "REV-10";
+                        else if (emailLower.includes('other.reviewer')) resolvedId = "REV-11";
+                        else resolvedId = "REV-11";
+                    } else if (role === 'fixer') {
+                        const emailLower = currentUser.email.toLowerCase();
+                        if (emailLower.includes('road.fixer')) resolvedId = "FIX-01";
+                        else if (emailLower.includes('water.fixer')) resolvedId = "FIX-03";
+                        else if (emailLower.includes('waste.fixer')) resolvedId = "FIX-05";
+                        else if (emailLower.includes('light.fixer')) resolvedId = "FIX-06";
+                        else if (emailLower.includes('park.fixer')) resolvedId = "FIX-07";
+                        else if (emailLower.includes('highway.fixer')) resolvedId = "FIX-08";
+                        else if (emailLower.includes('grid.fixer')) resolvedId = "FIX-09";
+                        else if (emailLower.includes('environ.fixer')) resolvedId = "FIX-10";
+                        else if (emailLower.includes('other.fixer')) resolvedId = "FIX-11";
+                        else resolvedId = "FIX-11";
+                    }
+                    currentUser.id = resolvedId;
+                    localStorage.setItem("user", JSON.stringify(currentUser));
+                }
                 
                 // Role toggle switcher is ONLY for sandbox/tester sessions
                 const roleToggleWrapper = document.getElementById("roleToggleWrapper");
@@ -702,7 +733,34 @@
                 
                 const payload = JSON.parse(jsonPayload);
                 const role = getRoleFromEmail(payload.email);
+                let resolvedId = payload.sub || payload.email;
+                if (role === 'reviewer') {
+                    const emailLower = payload.email.toLowerCase();
+                    if (emailLower.includes('road.reviewer') || emailLower.includes('rajesh')) resolvedId = "REV-01";
+                    else if (emailLower.includes('water.reviewer') || emailLower.includes('priya')) resolvedId = "REV-03";
+                    else if (emailLower.includes('waste.reviewer') || emailLower.includes('sunil')) resolvedId = "REV-05";
+                    else if (emailLower.includes('light.reviewer') || emailLower.includes('deepa')) resolvedId = "REV-06";
+                    else if (emailLower.includes('park.reviewer') || emailLower.includes('vikram')) resolvedId = "REV-07";
+                    else if (emailLower.includes('highway.reviewer') || emailLower.includes('sonia')) resolvedId = "REV-08";
+                    else if (emailLower.includes('grid.reviewer') || emailLower.includes('rahul')) resolvedId = "REV-09";
+                    else if (emailLower.includes('environ.reviewer') || emailLower.includes('anjali')) resolvedId = "REV-10";
+                    else if (emailLower.includes('other.reviewer')) resolvedId = "REV-11";
+                    else resolvedId = "REV-11";
+                } else if (role === 'fixer') {
+                    const emailLower = payload.email.toLowerCase();
+                    if (emailLower.includes('road.fixer')) resolvedId = "FIX-01";
+                    else if (emailLower.includes('water.fixer')) resolvedId = "FIX-03";
+                    else if (emailLower.includes('waste.fixer')) resolvedId = "FIX-05";
+                    else if (emailLower.includes('light.fixer')) resolvedId = "FIX-06";
+                    else if (emailLower.includes('park.fixer')) resolvedId = "FIX-07";
+                    else if (emailLower.includes('highway.fixer')) resolvedId = "FIX-08";
+                    else if (emailLower.includes('grid.fixer')) resolvedId = "FIX-09";
+                    else if (emailLower.includes('environ.fixer')) resolvedId = "FIX-10";
+                    else if (emailLower.includes('other.fixer')) resolvedId = "FIX-11";
+                    else resolvedId = "FIX-11";
+                }
                 currentUser = {
+                    id: resolvedId,
                     email: payload.email,
                     name: payload.name,
                     avatar: payload.picture,
@@ -768,8 +826,35 @@
             const role = getRoleFromEmail(email);
             const avatarUrl = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(seed)}`;
             
+            let resolvedId = name.toLowerCase().replace(/\s+/g, '-');
+            if (role === 'reviewer') {
+                const emailLower = email.toLowerCase();
+                if (emailLower.includes('road.reviewer') || emailLower.includes('rajesh')) resolvedId = "REV-01";
+                else if (emailLower.includes('water.reviewer') || emailLower.includes('priya')) resolvedId = "REV-03";
+                else if (emailLower.includes('waste.reviewer') || emailLower.includes('sunil')) resolvedId = "REV-05";
+                else if (emailLower.includes('light.reviewer') || emailLower.includes('deepa')) resolvedId = "REV-06";
+                else if (emailLower.includes('park.reviewer') || emailLower.includes('vikram')) resolvedId = "REV-07";
+                else if (emailLower.includes('highway.reviewer') || emailLower.includes('sonia')) resolvedId = "REV-08";
+                else if (emailLower.includes('grid.reviewer') || emailLower.includes('rahul')) resolvedId = "REV-09";
+                else if (emailLower.includes('environ.reviewer') || emailLower.includes('anjali')) resolvedId = "REV-10";
+                else if (emailLower.includes('other.reviewer')) resolvedId = "REV-11";
+                else resolvedId = "REV-11";
+            } else if (role === 'fixer') {
+                const emailLower = email.toLowerCase();
+                if (emailLower.includes('road.fixer')) resolvedId = "FIX-01";
+                else if (emailLower.includes('water.fixer')) resolvedId = "FIX-03";
+                else if (emailLower.includes('waste.fixer')) resolvedId = "FIX-05";
+                else if (emailLower.includes('light.fixer')) resolvedId = "FIX-06";
+                else if (emailLower.includes('park.fixer')) resolvedId = "FIX-07";
+                else if (emailLower.includes('highway.fixer')) resolvedId = "FIX-08";
+                else if (emailLower.includes('grid.fixer')) resolvedId = "FIX-09";
+                else if (emailLower.includes('environ.fixer')) resolvedId = "FIX-10";
+                else if (emailLower.includes('other.fixer')) resolvedId = "FIX-11";
+                else resolvedId = "FIX-11";
+            }
+
             currentUser = {
-                id: name.toLowerCase().replace(/\s+/g, '-'),
+                id: resolvedId,
                 email: email,
                 name: name,
                 avatar: avatarUrl,
