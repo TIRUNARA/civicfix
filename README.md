@@ -40,6 +40,9 @@ Powered by a **dual-loop AI engine** leveraging **Gemini 2.5**, the system eradi
 
 CivicFix is constructed on a high-performance, cloud-native stack optimized for rapid deployment, fault tolerance, and horizontal scalability. The architecture integrates FastAPI, PostgreSQL, and the Google GenAI SDK to form a cohesive cognitive routing engine.
 
+### 📐 Visual Data Flow & System Architecture
+![CivicFix System Architecture Blueprint](diagram/architecture.svg)
+
 | Layer | Technology | Function |
 |---|---|---|
 | **Cognitive AI** | Gemini 2.5 (Google GenAI SDK) | Executes multimodal image analysis, NLP tagging, and visual comparative verification. |
